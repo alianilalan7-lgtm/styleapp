@@ -5,7 +5,7 @@ import { ServiceWorkerRegister } from "@/components/sw-register";
 
 export const metadata: Metadata = {
   title: "Style Engine PWA",
-  description: "Generate distinctive website design directions fast.",
+  description: "Web tasarim fikirlerini hizli ve cesitli sekilde uret.",
   manifest: "/manifest.webmanifest",
   icons: {
     apple: "/icon-192.svg",
@@ -19,7 +19,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="tr">
       <body>
         <ServiceWorkerRegister />
         {children}

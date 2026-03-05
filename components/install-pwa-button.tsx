@@ -7,7 +7,7 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
-export function InstallPwaButton() {
+export function InstallPwaButton({ label = "Install App" }: { label?: string }) {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(
     null,
   );
@@ -40,7 +40,7 @@ export function InstallPwaButton() {
       }}
       className="rounded-xl border border-edge bg-panel px-4 py-2 text-sm font-semibold text-text transition hover:border-accent"
     >
-      Install App
+      {label}
     </button>
   );
 }
