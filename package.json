@@ -6,7 +6,8 @@
     "dev": "node scripts/next-safe.js dev",
     "build": "node scripts/next-safe.js build",
     "start": "node scripts/next-safe.js start",
-    "lint": "node scripts/next-safe.js lint"
+    "lint": "node scripts/next-safe.js lint",
+    "catalog:preview": "node scripts/ingest/build-catalog.js"
   },
   "dependencies": {
     "next": "15.3.1",

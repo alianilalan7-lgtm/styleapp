@@ -4,21 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InstallPwaButton } from "@/components/install-pwa-button";
 import {
-  BrandDirection,
-  OPTIONS,
-  PILLARS,
-  PROMPT_PRESETS,
-  Pillar,
-  PromptPreset,
-  StylePack,
-  buildConcept,
-  buildIdeaBoard,
-  buildPromptByPreset,
-  generatePack,
-  getPackValue,
-  recommendBrandDirections,
-  setPackValue,
-} from "@/lib/style-engine";
+  BlueprintOutput,
+  ProjectBrief,
+  buildBlueprintOutput,
+  buildSuggestedPages,
+} from "@/lib/blueprint";
+import {
+  ComponentDepthPreference,
+  FrameworkPreference,
+  PAGE_TYPE_OPTIONS,
+  PageType,
+  SITE_TYPE_OPTIONS,
+  SiteType,
+} from "@/lib/catalog";
 import {
   DEFAULT_LOCALE,
   LOCALES,
@@ -29,6 +27,18 @@ import {
   interpolate,
   localeTag,
 } from "@/lib/i18n";
+import {
+  BrandDirection,
+  OPTIONS,
+  PILLARS,
+  PROMPT_PRESETS,
+  Pillar,
+  PromptPreset,
+  StylePack,
+  generatePack,
+  getPackValue,
+  setPackValue,
+} from "@/lib/style-engine";
 
 type SavedPack = {
   id: string;
@@ -144,6 +154,30 @@ function packSignature(pack: StylePack) {
   return JSON.stringify(pack);
 }
 
+function pageSignature(pages: PageType[]) {
+  return pages.join("|");
+}
+
+function buildBrief(input: {
+  siteType: SiteType;
+  brandBrief: string;
+  audience: string;
+  pageCount: number;
+  requiredPages: PageType[];
+  frameworkPreference: FrameworkPreference;
+  componentDepthPreference: ComponentDepthPreference;
+}): ProjectBrief {
+  return {
+    siteType: input.siteType,
+    brandBrief: input.brandBrief,
+    audience: input.audience,
+    pageCount: input.pageCount,
+    requiredPages: input.requiredPages,
+    frameworkPreference: input.frameworkPreference,
+    componentDepthPreference: input.componentDepthPreference,
+  };
+}
+
 function Pill({
   label,
   value,
@@ -201,6 +235,26 @@ function Pill({
   );
 }
 
+function SectionCard({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-3xl border border-edge bg-panel/70 p-6 shadow-panel">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-xl font-bold">{title}</h2>
+        {hint ? <p className="text-xs text-muted">{hint}</p> : null}
+      </div>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
 export default function StyleEnginePage() {
   const [locked, setLocked] = useState<Partial<Record<Pillar, boolean>>>({
     Layout: false,
@@ -213,13 +267,75 @@ export default function StyleEnginePage() {
   const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
   const [promptPreset, setPromptPreset] = useState<PromptPreset>("GPT");
   const [brandBrief, setBrandBrief] = useState("");
+  const [audience, setAudience] = useState("");
+  const [siteType, setSiteType] = useState<SiteType>("marketing");
+  const [pageCount, setPageCount] = useState(5);
+  const [requiredPages, setRequiredPages] = useState<PageType[]>(() =>
+    buildSuggestedPages("marketing", 5),
+  );
+  const [frameworkPreference, setFrameworkPreference] =
+    useState<FrameworkPreference>("auto");
+  const [componentDepthPreference, setComponentDepthPreference] =
+    useState<ComponentDepthPreference>("balanced");
   const [brandDirections, setBrandDirections] = useState<BrandDirection[]>([]);
+  const [generatedBlueprint, setGeneratedBlueprint] =
+    useState<BlueprintOutput | null>(null);
   const [favorites, setFavorites] = useState<SavedPack[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [message, setMessage] = useState("");
+  const [generationError, setGenerationError] = useState("");
+  const [isGeneratingBlueprint, setIsGeneratingBlueprint] = useState(false);
   const [urlReady, setUrlReady] = useState(false);
   const hasLoadedPackFromUrl = useRef(false);
   const text = UI_TEXT[locale];
+
+  const brief = useMemo(
+    () =>
+      buildBrief({
+        siteType,
+        brandBrief,
+        audience,
+        pageCount,
+        requiredPages,
+        frameworkPreference,
+        componentDepthPreference,
+      }),
+    [
+      audience,
+      brandBrief,
+      componentDepthPreference,
+      frameworkPreference,
+      pageCount,
+      requiredPages,
+      siteType,
+    ],
+  );
+
+  const localBlueprint = useMemo(
+    () => buildBlueprintOutput(brief, pack, promptPreset, locale),
+    [brief, locale, pack, promptPreset],
+  );
+
+  const displayedBlueprint = generatedBlueprint ?? localBlueprint;
+  const prompt = displayedBlueprint.prompt;
+  const concept = displayedBlueprint.concept;
+  const ideaBoard = displayedBlueprint.ideaBoard;
+  const pagePlans = displayedBlueprint.pagePlans;
+  const componentRecommendations = displayedBlueprint.componentRecommendations;
+  const frameworkRecommendations = displayedBlueprint.frameworkRecommendations;
+
+  const pageMatches = useMemo(
+    () =>
+      Object.fromEntries(
+        pagePlans.map((pagePlan) => [
+          pagePlan.page,
+          componentRecommendations.filter(
+            (recommendation) => recommendation.recommendedForPage === pagePlan.page,
+          ),
+        ]),
+      ) as Record<PageType, typeof componentRecommendations>,
+    [componentRecommendations, pagePlans],
+  );
 
   const trackHistory = useCallback((nextPack: StylePack) => {
     setHistory((prev) => {
@@ -289,7 +405,7 @@ export default function StyleEnginePage() {
       }
     }
     setUrlReady(true);
-  }, [trackHistory, text.packLoadedFromUrl]);
+  }, [text.packLoadedFromUrl, trackHistory]);
 
   useEffect(() => {
     if (!urlReady) return;
@@ -297,14 +413,32 @@ export default function StyleEnginePage() {
     url.searchParams.set("pack", encodePack(pack));
     url.searchParams.set(LOCALE_QUERY_KEY, locale);
     window.history.replaceState({}, "", `${url.pathname}?${url.searchParams.toString()}`);
-  }, [pack, urlReady, locale]);
+  }, [locale, pack, urlReady]);
 
-  const prompt = useMemo(
-    () => buildPromptByPreset(pack, promptPreset, brandBrief, locale),
-    [pack, promptPreset, brandBrief, locale],
-  );
-  const concept = useMemo(() => buildConcept(pack, locale), [pack, locale]);
-  const ideaBoard = useMemo(() => buildIdeaBoard(pack, locale), [pack, locale]);
+  useEffect(() => {
+    const suggested = buildSuggestedPages(siteType, pageCount);
+    setRequiredPages((prev) => {
+      const preserved = prev.filter((page) => suggested.includes(page));
+      const next = Array.from(new Set([...preserved, ...suggested])).slice(0, pageCount);
+      return pageSignature(prev) === pageSignature(next) ? prev : next;
+    });
+  }, [pageCount, siteType]);
+
+  useEffect(() => {
+    setGeneratedBlueprint(null);
+    setGenerationError("");
+  }, [
+    audience,
+    brandBrief,
+    componentDepthPreference,
+    frameworkPreference,
+    locale,
+    pack,
+    pageCount,
+    promptPreset,
+    requiredPages,
+    siteType,
+  ]);
 
   const toggleLock = (pillar: Pillar) => {
     setLocked((prev) => ({ ...prev, [pillar]: !prev[pillar] }));
@@ -330,9 +464,42 @@ export default function StyleEnginePage() {
   };
 
   const createBrandDirections = () => {
-    const suggestions = recommendBrandDirections(brandBrief, 5);
-    setBrandDirections(suggestions);
+    setBrandDirections(displayedBlueprint.designDirections);
     setMessage(text.generatedBrandDirections);
+  };
+
+  const generateBlueprint = async () => {
+    setIsGeneratingBlueprint(true);
+    setGenerationError("");
+    setMessage(text.generatingBlueprint);
+
+    try {
+      const response = await fetch("/api/blueprint/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          brief,
+          pack,
+          locale,
+          preset: promptPreset,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const blueprint = (await response.json()) as BlueprintOutput;
+      setGeneratedBlueprint(blueprint);
+      setBrandDirections(blueprint.designDirections);
+      setMessage("");
+    } catch {
+      setGenerationError(text.generationError);
+    } finally {
+      setIsGeneratingBlueprint(false);
+    }
   };
 
   const copyPrompt = async () => {
@@ -369,13 +536,15 @@ export default function StyleEnginePage() {
 
   const saveFavorite = () => {
     setFavorites((prev) => {
+      const signature = packSignature(pack);
+      const deduped = prev.filter((favorite) => packSignature(favorite.pack) !== signature);
       const next: SavedPack[] = [
         {
           id: `${Date.now()}`,
           createdAt: new Date().toISOString(),
           pack,
         },
-        ...prev,
+        ...deduped,
       ].slice(0, MAX_FAVORITES);
       writeList(FAVORITES_KEY, next);
       return next;
@@ -406,14 +575,26 @@ export default function StyleEnginePage() {
     setMessage(text.removedFavorite);
   };
 
+  const toggleRequiredPage = (page: PageType) => {
+    setRequiredPages((prev) => {
+      const exists = prev.includes(page);
+      if (exists) {
+        if (prev.length === 1) return prev;
+        return prev.filter((item) => item !== page);
+      }
+      if (prev.length >= pageCount) return prev;
+      return [...prev, page];
+    });
+  };
+
   return (
     <div className="min-h-screen">
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
         <section className="rounded-3xl border border-edge bg-panel/70 p-6 shadow-panel backdrop-blur-sm sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{text.title}</h1>
-              <p className="mt-2 max-w-2xl text-sm text-muted sm:text-base">
+              <p className="mt-2 max-w-3xl text-sm text-muted sm:text-base">
                 {text.subtitle}
               </p>
             </div>
@@ -541,20 +722,128 @@ export default function StyleEnginePage() {
           {message ? <p className="mt-3 text-sm text-muted">{message}</p> : null}
         </section>
 
-        <section className="mt-6 grid gap-6 xl:grid-cols-2">
-          <div className="rounded-3xl border border-edge bg-panel/70 p-6 shadow-panel xl:col-span-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-xl font-bold">{text.brandBriefTitle}</h2>
-              <button
-                onClick={createBrandDirections}
-                className="rounded-xl border border-edge bg-panel px-4 py-2 text-sm font-semibold transition hover:border-accent"
-              >
-                {text.brandBriefAction}
-              </button>
+        <section className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <SectionCard title={text.brandBriefTitle}>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div>
+                <label className="text-xs uppercase tracking-[0.18em] text-muted">
+                  {text.siteTypeLabel}
+                </label>
+                <select
+                  value={siteType}
+                  onChange={(event) => setSiteType(event.target.value as SiteType)}
+                  className="mt-2 w-full rounded-xl border border-edge bg-surface/60 px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
+                >
+                  {SITE_TYPE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {text.siteTypeLabels[option]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs uppercase tracking-[0.18em] text-muted">
+                  {text.pageCountLabel}
+                </label>
+                <select
+                  value={pageCount}
+                  onChange={(event) => setPageCount(Number(event.target.value))}
+                  className="mt-2 w-full rounded-xl border border-edge bg-surface/60 px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
+                >
+                  {[3, 4, 5, 6, 7, 8].map((count) => (
+                    <option key={count} value={count}>
+                      {count}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="lg:col-span-2">
+                <label className="text-xs uppercase tracking-[0.18em] text-muted">
+                  {text.audienceLabel}
+                </label>
+                <input
+                  value={audience}
+                  onChange={(event) => setAudience(event.target.value)}
+                  placeholder={text.audiencePlaceholder}
+                  className="mt-2 w-full rounded-xl border border-edge bg-surface/60 px-4 py-3 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs uppercase tracking-[0.18em] text-muted">
+                  {text.frameworkPreferenceLabel}
+                </label>
+                <select
+                  value={frameworkPreference}
+                  onChange={(event) =>
+                    setFrameworkPreference(event.target.value as FrameworkPreference)
+                  }
+                  className="mt-2 w-full rounded-xl border border-edge bg-surface/60 px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
+                >
+                  {(
+                    Object.keys(text.frameworkPreferenceLabels) as FrameworkPreference[]
+                  ).map((option) => (
+                    <option key={option} value={option}>
+                      {text.frameworkPreferenceLabels[option]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs uppercase tracking-[0.18em] text-muted">
+                  {text.componentDepthLabel}
+                </label>
+                <select
+                  value={componentDepthPreference}
+                  onChange={(event) =>
+                    setComponentDepthPreference(
+                      event.target.value as ComponentDepthPreference,
+                    )
+                  }
+                  className="mt-2 w-full rounded-xl border border-edge bg-surface/60 px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
+                >
+                  {(
+                    Object.keys(text.componentDepthLabels) as ComponentDepthPreference[]
+                  ).map((option) => (
+                    <option key={option} value={option}>
+                      {text.componentDepthLabels[option]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="lg:col-span-2">
+                <label className="text-xs uppercase tracking-[0.18em] text-muted">
+                  {text.requiredPagesLabel}
+                </label>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {PAGE_TYPE_OPTIONS.map((page) => {
+                    const isSelected = requiredPages.includes(page);
+                    const isDisabled = !isSelected && requiredPages.length >= pageCount;
+                    return (
+                      <button
+                        key={page}
+                        type="button"
+                        onClick={() => toggleRequiredPage(page)}
+                        disabled={isDisabled}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                          isSelected
+                            ? "border-accent bg-accent text-surface"
+                            : "border-edge bg-surface text-text hover:border-accent disabled:cursor-not-allowed disabled:opacity-40"
+                        }`}
+                      >
+                        {text.pageTypeLabels[page]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-            <p className="mt-2 text-sm text-muted">
-              {text.brandBriefDescription}
-            </p>
+
+            <p className="mt-5 text-sm text-muted">{text.brandBriefDescription}</p>
             <textarea
               value={brandBrief}
               onChange={(event) => setBrandBrief(event.target.value)}
@@ -562,8 +851,28 @@ export default function StyleEnginePage() {
               className="mt-3 min-h-36 w-full rounded-xl border border-edge bg-surface/60 p-4 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
             />
 
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                onClick={createBrandDirections}
+                className="rounded-xl border border-edge bg-panel px-4 py-2 text-sm font-semibold transition hover:border-accent"
+              >
+                {text.brandBriefAction}
+              </button>
+              <button
+                onClick={generateBlueprint}
+                disabled={isGeneratingBlueprint}
+                className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-surface transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isGeneratingBlueprint ? text.generatingBlueprint : text.blueprintAction}
+              </button>
+            </div>
+
+            {generationError ? (
+              <p className="mt-3 text-sm text-red-300">{generationError}</p>
+            ) : null}
+
             {brandDirections.length > 0 ? (
-              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <div className="mt-5 grid gap-3 lg:grid-cols-2">
                 {brandDirections.map((direction) => (
                   <article
                     key={direction.id}
@@ -599,14 +908,10 @@ export default function StyleEnginePage() {
                 ))}
               </div>
             ) : null}
-          </div>
+          </SectionCard>
 
-          <div className="rounded-3xl border border-edge bg-panel/70 p-6 shadow-panel">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-xl font-bold">{text.aiPromptTitle}</h2>
-              <span className="text-xs text-muted">{text.aiPromptHint}</span>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
+          <SectionCard title={text.aiPromptTitle} hint={text.aiPromptHint}>
+            <div className="flex flex-wrap gap-2">
               {PROMPT_PRESETS.map((preset) => (
                 <button
                   key={preset}
@@ -624,11 +929,43 @@ export default function StyleEnginePage() {
             <pre className="mt-4 whitespace-pre-wrap rounded-xl border border-edge bg-surface/60 p-4 text-sm leading-relaxed text-text">
               {prompt}
             </pre>
-          </div>
+          </SectionCard>
+        </section>
 
-          <div className="rounded-3xl border border-edge bg-panel/70 p-6 shadow-panel">
-            <h2 className="text-xl font-bold">{text.conceptBlueprintTitle}</h2>
-            <div className="mt-4 grid gap-4 text-sm">
+        <section className="mt-6 grid gap-6 xl:grid-cols-2">
+          <SectionCard title={text.pageStructureTitle} hint={text.pageStructureHint}>
+            <div className="grid gap-4">
+              {pagePlans.map((pagePlan) => (
+                <article
+                  key={pagePlan.page}
+                  className="rounded-xl border border-edge bg-surface/60 p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="font-semibold">{text.pageTypeLabels[pagePlan.page]}</h3>
+                    <span className="text-xs text-muted">
+                      {pagePlan.recommendedCategories.join(" / ")}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs uppercase tracking-[0.14em] text-muted">
+                    {text.sectionsLabel}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {pagePlan.sections.map((section) => (
+                      <span
+                        key={section}
+                        className="rounded-full border border-edge bg-panel px-3 py-1 text-xs text-muted"
+                      >
+                        {section}
+                      </span>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </SectionCard>
+
+          <SectionCard title={text.conceptBlueprintTitle}>
+            <div className="grid gap-4 text-sm">
               <div className="rounded-xl border border-edge bg-surface/60 p-4">
                 <h3 className="font-semibold">{text.homepageSections}</h3>
                 <ul className="mt-2 space-y-1 text-muted">
@@ -664,15 +1001,11 @@ export default function StyleEnginePage() {
                 </ul>
               </div>
             </div>
-          </div>
+          </SectionCard>
         </section>
 
-        <section className="mt-6 rounded-3xl border border-edge bg-panel/70 p-6 shadow-panel">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xl font-bold">{text.ideaBoardTitle}</h2>
-            <p className="text-xs text-muted">{text.ideaBoardHint}</p>
-          </div>
-          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <SectionCard title={text.ideaBoardTitle} hint={text.ideaBoardHint}>
+          <div className="grid gap-4 lg:grid-cols-3">
             {ideaBoard.moodboard.map((card) => (
               <article key={card.title} className="rounded-xl border border-edge bg-surface/60 p-4">
                 <h3 className="font-semibold">{card.title}</h3>
@@ -680,13 +1013,17 @@ export default function StyleEnginePage() {
               </article>
             ))}
           </div>
+
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {ideaBoard.wireframe.slice(0, 4).map((row) => (
+            {ideaBoard.wireframe.map((row) => (
               <article key={row.section} className="rounded-xl border border-edge bg-surface/60 p-4">
                 <p className="text-sm font-semibold">{row.section}</p>
                 <div className="mt-3 grid gap-2">
                   {row.blocks.map((block) => (
-                    <div key={block} className="rounded-lg border border-edge/80 bg-panel px-3 py-2 text-xs text-muted">
+                    <div
+                      key={block}
+                      className="rounded-lg border border-edge/80 bg-panel px-3 py-2 text-xs text-muted"
+                    >
                       {block}
                     </div>
                   ))}
@@ -694,6 +1031,7 @@ export default function StyleEnginePage() {
               </article>
             ))}
           </div>
+
           <div className="mt-4 rounded-xl border border-edge bg-surface/60 p-4">
             <h3 className="font-semibold">{text.artDirectionAxes}</h3>
             <ul className="mt-2 space-y-1 text-sm text-muted">
@@ -702,7 +1040,130 @@ export default function StyleEnginePage() {
               ))}
             </ul>
           </div>
+        </SectionCard>
+
+        <section className="mt-6 grid gap-6 xl:grid-cols-2">
+          <SectionCard title={text.freeComponentsTitle} hint={text.freeComponentsHint}>
+            {componentRecommendations.length === 0 ? (
+              <p className="text-sm text-muted">{text.noRecommendations}</p>
+            ) : (
+              <div className="grid gap-4">
+                {componentRecommendations.map((entry) => (
+                  <article
+                    key={`${entry.item.id}-${entry.recommendedForPage}`}
+                    className="rounded-xl border border-edge bg-surface/60 p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="font-semibold">{entry.item.componentName}</h3>
+                      <span className="text-xs text-muted">
+                        {text.sourceLabel}: {entry.item.source}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-muted">
+                      {entry.item.libraryName} · {entry.item.category}
+                    </p>
+                    <p className="mt-3 text-sm text-muted">
+                      <span className="font-semibold text-text">{text.reasonLabel}:</span>{" "}
+                      {entry.reason}
+                    </p>
+                    <p className="mt-2 text-sm text-muted">
+                      <span className="font-semibold text-text">
+                        {text.recommendedForLabel}:
+                      </span>{" "}
+                      {text.pageTypeLabels[entry.recommendedForPage]} /{" "}
+                      {entry.recommendedForSection}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted">
+                      <span>
+                        {text.licenseLabel}: {entry.item.license}
+                      </span>
+                      <span>React: {entry.item.reactCompatible ? "Yes" : "No"}</span>
+                      <span>{entry.item.framework}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+
+          <SectionCard title={text.frameworksTitle} hint={text.frameworksHint}>
+            {frameworkRecommendations.length === 0 ? (
+              <p className="text-sm text-muted">{text.noRecommendations}</p>
+            ) : (
+              <div className="grid gap-4">
+                {frameworkRecommendations.map((framework) => (
+                  <article
+                    key={framework.id}
+                    className="rounded-xl border border-edge bg-surface/60 p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="font-semibold">{framework.name}</h3>
+                      <span className="text-xs text-muted">{framework.type}</span>
+                    </div>
+                    <p className="mt-3 text-sm text-muted">
+                      <span className="font-semibold text-text">{text.reasonLabel}:</span>{" "}
+                      {framework.reason}
+                    </p>
+                    <p className="mt-2 text-sm text-muted">
+                      <span className="font-semibold text-text">{text.pairingsLabel}:</span>{" "}
+                      {framework.pairings.join(", ")}
+                    </p>
+                    <p className="mt-2 text-sm text-muted">
+                      <span className="font-semibold text-text">
+                        {text.constraintsLabel}:
+                      </span>{" "}
+                      {framework.constraints.join(", ")}
+                    </p>
+                    <a
+                      href={framework.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 inline-flex text-sm font-semibold text-accent transition hover:opacity-80"
+                    >
+                      {framework.name}
+                    </a>
+                  </article>
+                ))}
+              </div>
+            )}
+          </SectionCard>
         </section>
+
+        <SectionCard title={text.pageMatchTitle} hint={text.pageMatchHint}>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {pagePlans.map((pagePlan) => {
+              const matches = pageMatches[pagePlan.page] ?? [];
+              return (
+                <article
+                  key={pagePlan.page}
+                  className="rounded-xl border border-edge bg-surface/60 p-4"
+                >
+                  <h3 className="font-semibold">{text.pageTypeLabels[pagePlan.page]}</h3>
+                  <p className="mt-1 text-sm text-muted">
+                    {pagePlan.sections.join(" / ")}
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    {matches.length === 0 ? (
+                      <p className="text-sm text-muted">{text.noRecommendations}</p>
+                    ) : (
+                      matches.map((entry) => (
+                        <div
+                          key={`${pagePlan.page}-${entry.item.id}`}
+                          className="rounded-lg border border-edge bg-panel px-3 py-3"
+                        >
+                          <p className="text-sm font-semibold">{entry.item.componentName}</p>
+                          <p className="mt-1 text-xs text-muted">
+                            {entry.item.libraryName} · {entry.recommendedForSection}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </SectionCard>
 
         <section className="mt-6 rounded-3xl border border-edge bg-panel/70 p-6 shadow-panel">
           <div className="flex items-center justify-between">
@@ -758,6 +1219,7 @@ export default function StyleEnginePage() {
               {text.clear}
             </button>
           </div>
+
           {history.length === 0 ? (
             <p className="mt-3 text-sm text-muted">{text.historyEmpty}</p>
           ) : (
