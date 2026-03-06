@@ -8,6 +8,7 @@
     "build": "node scripts/next-safe.js build --webpack",
     "start": "node scripts/next-safe.js start",
     "lint": "eslint .",
+    "hooks:install": "git config core.hooksPath .githooks && chmod +x .githooks/pre-commit scripts/check-secrets.sh",
     "catalog:preview": "node scripts/ingest/build-catalog.js"
   },
   "dependencies": {
