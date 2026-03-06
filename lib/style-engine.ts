@@ -672,6 +672,9 @@ export function recommendBrandDirections(
   brandBrief: string,
   count = 5,
 ): BrandDirection[] {
+  const safeCount = Math.max(0, Math.min(count, BRAND_TEMPLATES.length));
+  if (safeCount === 0) return [];
+
   const normalized = brandBrief.trim().toLocaleLowerCase("tr-TR");
   const baseSeed = hashText(normalized || "style-engine");
 
@@ -695,7 +698,7 @@ export function recommendBrandDirections(
 
   if (scored[0]?.score > 0) {
     for (const item of scored) {
-      if (selected.length >= count) break;
+      if (selected.length >= safeCount) break;
       if (used.has(item.template.id)) continue;
       selected.push(item.template);
       used.add(item.template.id);
@@ -703,16 +706,17 @@ export function recommendBrandDirections(
   }
 
   let pointer = baseSeed % BRAND_TEMPLATES.length;
-  while (selected.length < count) {
+  while (selected.length < safeCount) {
     const candidate = BRAND_TEMPLATES[pointer];
     if (!used.has(candidate.id)) {
       selected.push(candidate);
       used.add(candidate.id);
     }
-    pointer = (pointer + 3) % BRAND_TEMPLATES.length;
+    // +1 guarantees we eventually visit every template and never loop forever.
+    pointer = (pointer + 1) % BRAND_TEMPLATES.length;
   }
 
-  return selected.slice(0, count).map((template, index) => ({
+  return selected.slice(0, safeCount).map((template, index) => ({
     ...template,
     id: `${template.id}-${index + 1}`,
   }));

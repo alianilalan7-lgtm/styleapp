@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 :root {
-  --color-surface: #091322;
-  --color-panel: #111e32;
-  --color-edge: #2e405f;
-  --color-text: #e9f0ff;
-  --color-muted: #9fb2d5;
+  --color-surface: #122238;
+  --color-panel: #182b45;
+  --color-edge: #5c79a6;
+  --color-text: #f4f8ff;
+  --color-muted: #c6d7f4;
   --color-accent: #9ce0ff;
 }
 
@@ -25,9 +25,11 @@ body {
   font-family: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
   color: var(--color-text);
   background:
-    radial-gradient(circle at 20% 10%, rgba(156, 224, 255, 0.15), transparent 40%),
-    radial-gradient(circle at 80% 0%, rgba(122, 197, 255, 0.18), transparent 34%),
-    linear-gradient(180deg, #08101d 0%, #0b1729 55%, #08101d 100%);
+    radial-gradient(circle at 15% 10%, rgba(156, 224, 255, 0.2), transparent 42%),
+    radial-gradient(circle at 85% 5%, rgba(88, 154, 240, 0.24), transparent 38%),
+    radial-gradient(circle at 50% 100%, rgba(126, 178, 251, 0.08), transparent 45%),
+    #0f1c31;
+  background-attachment: fixed;
 }
 
 h1,
@@ -35,4 +37,60 @@ h2,
 h3,
 h4 {
   font-family: "Space Grotesk", "DIN Condensed", "Arial Narrow", sans-serif;
+}
+
+@layer components {
+  .glass-panel {
+    background:
+      linear-gradient(160deg, rgba(28, 46, 74, 0.78), rgba(13, 23, 39, 0.64));
+    border: 1px solid rgba(153, 186, 235, 0.28);
+    box-shadow:
+      0 24px 50px -32px rgba(4, 10, 20, 0.95),
+      inset 0 1px 0 rgba(232, 242, 255, 0.09);
+    backdrop-filter: blur(16px);
+    transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+
+  .glass-surface {
+    background:
+      linear-gradient(165deg, rgba(20, 34, 56, 0.74), rgba(12, 22, 38, 0.56));
+    border: 1px solid rgba(145, 177, 224, 0.26);
+    box-shadow: inset 0 1px 0 rgba(229, 241, 255, 0.08);
+    backdrop-filter: blur(14px);
+    transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+
+  .glass-panel:hover,
+  .glass-panel:focus-within {
+    border-color: rgba(174, 210, 255, 0.55);
+    box-shadow:
+      0 24px 56px -30px rgba(4, 10, 20, 0.95),
+      0 0 36px rgba(156, 224, 255, 0.18),
+      inset 0 1px 0 rgba(232, 242, 255, 0.16);
+  }
+
+  .glass-surface:hover,
+  .glass-surface:focus-within {
+    border-color: rgba(174, 210, 255, 0.48);
+    box-shadow:
+      0 0 30px rgba(156, 224, 255, 0.14),
+      inset 0 1px 0 rgba(232, 242, 255, 0.14);
+    transform: translateY(-1px);
+  }
+
+  .choice-chip {
+    transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  }
+
+  .choice-chip:hover,
+  .choice-chip:focus-visible {
+    border-color: rgba(174, 210, 255, 0.55);
+    box-shadow: 0 0 24px rgba(156, 224, 255, 0.2);
+    transform: translateY(-1px);
+  }
+
+  .glass-panel .text-muted,
+  .glass-surface .text-muted {
+    color: #ccdcf7;
+  }
 }

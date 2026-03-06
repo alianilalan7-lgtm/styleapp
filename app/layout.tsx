@@ -21,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="tr">
       <body>
-        {process.env.NODE_ENV === "production" ? <ServiceWorkerRegister /> : null}
+        <ServiceWorkerRegister />
         {children}
       </body>
     </html>

@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 const { spawn, spawnSync } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const PORT = String(process.env.PORT || "3000");
+const HOST = String(process.env.HOST || "localhost");
 
 function runSync(command, args) {
   return spawnSync(command, args, {
@@ -52,13 +54,23 @@ function stopExistingNextOnPort(port) {
   }
 }
 
+function clearNextBuildOutput() {
+  const nextDir = path.join(process.cwd(), ".next");
+  try {
+    fs.rmSync(nextDir, { recursive: true, force: true });
+  } catch {
+    // Ignore cleanup failures; dev server can still attempt startup.
+  }
+}
+
 function run() {
+  clearNextBuildOutput();
   stopExistingNextOnPort(PORT);
 
   const nextSafeScript = path.join(__dirname, "next-safe.js");
   const child = spawn(
     process.execPath,
-    [nextSafeScript, "dev", "--hostname", "localhost", "--port", PORT],
+    [nextSafeScript, "dev", "--webpack", "--hostname", HOST, "--port", PORT],
     {
       stdio: "inherit",
       env: process.env,

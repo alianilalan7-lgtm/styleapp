@@ -56,6 +56,13 @@ const FAVORITES_KEY = "style-engine-favorites-v1";
 const HISTORY_KEY = "style-engine-history-v1";
 const MAX_FAVORITES = 12;
 const MAX_HISTORY = 20;
+const INITIAL_PACK: StylePack = {
+  layout: OPTIONS.Layout[0],
+  visual: OPTIONS.Visual[0],
+  typography: OPTIONS.Typography[0],
+  mood: OPTIONS.Mood[0],
+  motion: OPTIONS.Motion[0],
+};
 
 function getStorageSafe(): Storage | null {
   if (typeof globalThis === "undefined") return null;
@@ -202,12 +209,12 @@ function Pill({
   manualSelectText: string;
 }) {
   return (
-    <div className="rounded-2xl border border-edge bg-panel/80 p-4 shadow-panel">
+    <div className="glass-panel rounded-2xl p-4 shadow-panel">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs uppercase tracking-[0.18em] text-muted">{label}</p>
+        <p className="text-sm uppercase tracking-[0.18em] text-muted">{label}</p>
         <button
           onClick={() => onToggle(pillar)}
-          className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+          className={`rounded-full px-3 py-1 text-sm font-semibold transition ${
             isLocked
               ? "bg-accent text-surface"
               : "bg-surface text-text hover:border hover:border-edge"
@@ -217,7 +224,7 @@ function Pill({
         </button>
       </div>
       <p className="mt-2 text-lg font-semibold leading-snug">{value}</p>
-      <label className="mt-4 block text-xs uppercase tracking-[0.14em] text-muted">
+      <label className="mt-4 block text-sm uppercase tracking-[0.14em] text-muted">
         {manualSelectText}
       </label>
       <select
@@ -245,10 +252,10 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-edge bg-panel/70 p-6 shadow-panel">
+    <section className="glass-panel rounded-3xl p-6 shadow-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-xl font-bold">{title}</h2>
-        {hint ? <p className="text-xs text-muted">{hint}</p> : null}
+        {hint ? <p className="text-sm text-muted">{hint}</p> : null}
       </div>
       <div className="mt-4">{children}</div>
     </section>
@@ -263,7 +270,7 @@ export default function StyleEnginePage() {
     Mood: false,
     Motion: false,
   });
-  const [pack, setPack] = useState<StylePack>(() => generatePack({}));
+  const [pack, setPack] = useState<StylePack>(INITIAL_PACK);
   const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
   const [promptPreset, setPromptPreset] = useState<PromptPreset>("GPT");
   const [brandBrief, setBrandBrief] = useState("");
@@ -590,7 +597,7 @@ export default function StyleEnginePage() {
   return (
     <div className="min-h-screen">
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
-        <section className="rounded-3xl border border-edge bg-panel/70 p-6 shadow-panel backdrop-blur-sm sm:p-8">
+        <section className="glass-panel rounded-3xl p-6 shadow-panel backdrop-blur-sm sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{text.title}</h1>
@@ -599,7 +606,7 @@ export default function StyleEnginePage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <label className="text-xs uppercase tracking-[0.18em] text-muted">
+              <label className="text-sm uppercase tracking-[0.18em] text-muted">
                 {text.languageLabel}
               </label>
               <select
@@ -726,13 +733,13 @@ export default function StyleEnginePage() {
           <SectionCard title={text.brandBriefTitle}>
             <div className="grid gap-4 lg:grid-cols-2">
               <div>
-                <label className="text-xs uppercase tracking-[0.18em] text-muted">
+                <label className="text-sm uppercase tracking-[0.18em] text-muted">
                   {text.siteTypeLabel}
                 </label>
                 <select
                   value={siteType}
                   onChange={(event) => setSiteType(event.target.value as SiteType)}
-                  className="mt-2 w-full rounded-xl border border-edge bg-surface/60 px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
+                  className="mt-2 w-full rounded-xl glass-surface px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
                 >
                   {SITE_TYPE_OPTIONS.map((option) => (
                     <option key={option} value={option}>
@@ -743,13 +750,13 @@ export default function StyleEnginePage() {
               </div>
 
               <div>
-                <label className="text-xs uppercase tracking-[0.18em] text-muted">
+                <label className="text-sm uppercase tracking-[0.18em] text-muted">
                   {text.pageCountLabel}
                 </label>
                 <select
                   value={pageCount}
                   onChange={(event) => setPageCount(Number(event.target.value))}
-                  className="mt-2 w-full rounded-xl border border-edge bg-surface/60 px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
+                  className="mt-2 w-full rounded-xl glass-surface px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
                 >
                   {[3, 4, 5, 6, 7, 8].map((count) => (
                     <option key={count} value={count}>
@@ -760,19 +767,19 @@ export default function StyleEnginePage() {
               </div>
 
               <div className="lg:col-span-2">
-                <label className="text-xs uppercase tracking-[0.18em] text-muted">
+                <label className="text-sm uppercase tracking-[0.18em] text-muted">
                   {text.audienceLabel}
                 </label>
                 <input
                   value={audience}
                   onChange={(event) => setAudience(event.target.value)}
                   placeholder={text.audiencePlaceholder}
-                  className="mt-2 w-full rounded-xl border border-edge bg-surface/60 px-4 py-3 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
+                  className="mt-2 w-full rounded-xl glass-surface px-4 py-3 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
                 />
               </div>
 
               <div>
-                <label className="text-xs uppercase tracking-[0.18em] text-muted">
+                <label className="text-sm uppercase tracking-[0.18em] text-muted">
                   {text.frameworkPreferenceLabel}
                 </label>
                 <select
@@ -780,7 +787,7 @@ export default function StyleEnginePage() {
                   onChange={(event) =>
                     setFrameworkPreference(event.target.value as FrameworkPreference)
                   }
-                  className="mt-2 w-full rounded-xl border border-edge bg-surface/60 px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
+                  className="mt-2 w-full rounded-xl glass-surface px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
                 >
                   {(
                     Object.keys(text.frameworkPreferenceLabels) as FrameworkPreference[]
@@ -793,7 +800,7 @@ export default function StyleEnginePage() {
               </div>
 
               <div>
-                <label className="text-xs uppercase tracking-[0.18em] text-muted">
+                <label className="text-sm uppercase tracking-[0.18em] text-muted">
                   {text.componentDepthLabel}
                 </label>
                 <select
@@ -803,7 +810,7 @@ export default function StyleEnginePage() {
                       event.target.value as ComponentDepthPreference,
                     )
                   }
-                  className="mt-2 w-full rounded-xl border border-edge bg-surface/60 px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
+                  className="mt-2 w-full rounded-xl glass-surface px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
                 >
                   {(
                     Object.keys(text.componentDepthLabels) as ComponentDepthPreference[]
@@ -816,7 +823,7 @@ export default function StyleEnginePage() {
               </div>
 
               <div className="lg:col-span-2">
-                <label className="text-xs uppercase tracking-[0.18em] text-muted">
+                <label className="text-sm uppercase tracking-[0.18em] text-muted">
                   {text.requiredPagesLabel}
                 </label>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -829,7 +836,7 @@ export default function StyleEnginePage() {
                         type="button"
                         onClick={() => toggleRequiredPage(page)}
                         disabled={isDisabled}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                        className={`choice-chip rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
                           isSelected
                             ? "border-accent bg-accent text-surface"
                             : "border-edge bg-surface text-text hover:border-accent disabled:cursor-not-allowed disabled:opacity-40"
@@ -848,7 +855,7 @@ export default function StyleEnginePage() {
               value={brandBrief}
               onChange={(event) => setBrandBrief(event.target.value)}
               placeholder={text.brandBriefPlaceholder}
-              className="mt-3 min-h-36 w-full rounded-xl border border-edge bg-surface/60 p-4 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
+              className="mt-3 min-h-36 w-full rounded-xl glass-surface p-4 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
             />
 
             <div className="mt-4 flex flex-wrap gap-3">
@@ -876,19 +883,19 @@ export default function StyleEnginePage() {
                 {brandDirections.map((direction) => (
                   <article
                     key={direction.id}
-                    className="rounded-xl border border-edge bg-surface/60 p-4"
+                    className="rounded-xl glass-surface p-5 shadow-panel"
                   >
-                    <h3 className="text-sm font-semibold">{direction.name}</h3>
-                    <p className="mt-1 text-sm text-muted">{direction.summary}</p>
-                    <p className="mt-3 text-xs text-muted">
+                    <h3 className="text-base font-semibold text-text">{direction.name}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-text">{direction.summary}</p>
+                    <p className="mt-3 text-sm text-muted">
                       {text.layoutLabel}: {direction.pack.layout} | {text.visualLabel}:{" "}
                       {direction.pack.visual}
                     </p>
-                    <p className="mt-1 text-xs text-muted">
+                    <p className="mt-1 text-sm text-muted">
                       {text.typographyLabel}: {direction.pack.typography} | {text.moodLabel}:{" "}
                       {direction.pack.mood}
                     </p>
-                    <p className="mt-1 text-xs text-muted">
+                    <p className="mt-1 text-sm text-muted">
                       {text.motionLabel}: {direction.pack.motion}
                     </p>
                     <button
@@ -900,7 +907,7 @@ export default function StyleEnginePage() {
                           }),
                         )
                       }
-                      className="mt-3 rounded-lg border border-edge bg-panel px-3 py-1.5 text-xs font-semibold transition hover:border-accent"
+                      className="mt-4 rounded-lg border border-edge bg-surface px-3 py-2 text-sm font-semibold text-text transition hover:border-accent"
                     >
                       {text.applyDirection}
                     </button>
@@ -916,7 +923,7 @@ export default function StyleEnginePage() {
                 <button
                   key={preset}
                   onClick={() => setPromptPreset(preset)}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  className={`rounded-full border px-3 py-1 text-sm font-semibold transition ${
                     promptPreset === preset
                       ? "border-accent bg-accent text-surface"
                       : "border-edge bg-panel text-text hover:border-accent"
@@ -926,7 +933,7 @@ export default function StyleEnginePage() {
                 </button>
               ))}
             </div>
-            <pre className="mt-4 whitespace-pre-wrap rounded-xl border border-edge bg-surface/60 p-4 text-sm leading-relaxed text-text">
+            <pre className="mt-4 whitespace-pre-wrap rounded-xl glass-surface p-4 text-sm leading-relaxed text-text">
               {prompt}
             </pre>
           </SectionCard>
@@ -938,22 +945,22 @@ export default function StyleEnginePage() {
               {pagePlans.map((pagePlan) => (
                 <article
                   key={pagePlan.page}
-                  className="rounded-xl border border-edge bg-surface/60 p-4"
+                  className="rounded-xl glass-surface p-4"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="font-semibold">{text.pageTypeLabels[pagePlan.page]}</h3>
-                    <span className="text-xs text-muted">
+                    <span className="text-sm text-muted">
                       {pagePlan.recommendedCategories.join(" / ")}
                     </span>
                   </div>
-                  <p className="mt-3 text-xs uppercase tracking-[0.14em] text-muted">
+                  <p className="mt-3 text-sm uppercase tracking-[0.14em] text-muted">
                     {text.sectionsLabel}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {pagePlan.sections.map((section) => (
                       <span
                         key={section}
-                        className="rounded-full border border-edge bg-panel px-3 py-1 text-xs text-muted"
+                        className="rounded-full border border-edge bg-panel px-3 py-1 text-sm text-muted"
                       >
                         {section}
                       </span>
@@ -966,7 +973,7 @@ export default function StyleEnginePage() {
 
           <SectionCard title={text.conceptBlueprintTitle}>
             <div className="grid gap-4 text-sm">
-              <div className="rounded-xl border border-edge bg-surface/60 p-4">
+              <div className="rounded-xl glass-surface p-4">
                 <h3 className="font-semibold">{text.homepageSections}</h3>
                 <ul className="mt-2 space-y-1 text-muted">
                   {concept.sections.map((section) => (
@@ -974,7 +981,7 @@ export default function StyleEnginePage() {
                   ))}
                 </ul>
               </div>
-              <div className="rounded-xl border border-edge bg-surface/60 p-4">
+              <div className="rounded-xl glass-surface p-4">
                 <h3 className="font-semibold">{text.signatureComponents}</h3>
                 <ul className="mt-2 space-y-1 text-muted">
                   {concept.components.map((component) => (
@@ -982,7 +989,7 @@ export default function StyleEnginePage() {
                   ))}
                 </ul>
               </div>
-              <div className="rounded-xl border border-edge bg-surface/60 p-4 text-muted">
+              <div className="rounded-xl glass-surface p-4 text-muted">
                 <p>
                   <span className="font-semibold text-text">{text.colorDirection}:</span>{" "}
                   {concept.colorDirection}
@@ -992,7 +999,7 @@ export default function StyleEnginePage() {
                   {concept.typeScale}
                 </p>
               </div>
-              <div className="rounded-xl border border-edge bg-surface/60 p-4">
+              <div className="rounded-xl glass-surface p-4">
                 <h3 className="font-semibold">{text.motionNotes}</h3>
                 <ul className="mt-2 space-y-1 text-muted">
                   {concept.motionNotes.map((note) => (
@@ -1007,7 +1014,7 @@ export default function StyleEnginePage() {
         <SectionCard title={text.ideaBoardTitle} hint={text.ideaBoardHint}>
           <div className="grid gap-4 lg:grid-cols-3">
             {ideaBoard.moodboard.map((card) => (
-              <article key={card.title} className="rounded-xl border border-edge bg-surface/60 p-4">
+              <article key={card.title} className="rounded-xl glass-surface p-4">
                 <h3 className="font-semibold">{card.title}</h3>
                 <p className="mt-2 text-sm text-muted">{card.cue}</p>
               </article>
@@ -1016,13 +1023,13 @@ export default function StyleEnginePage() {
 
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             {ideaBoard.wireframe.map((row) => (
-              <article key={row.section} className="rounded-xl border border-edge bg-surface/60 p-4">
+              <article key={row.section} className="rounded-xl glass-surface p-4">
                 <p className="text-sm font-semibold">{row.section}</p>
                 <div className="mt-3 grid gap-2">
                   {row.blocks.map((block) => (
                     <div
                       key={block}
-                      className="rounded-lg border border-edge/80 bg-panel px-3 py-2 text-xs text-muted"
+                      className="rounded-lg border border-edge/80 bg-panel px-3 py-2 text-sm text-muted"
                     >
                       {block}
                     </div>
@@ -1032,7 +1039,7 @@ export default function StyleEnginePage() {
             ))}
           </div>
 
-          <div className="mt-4 rounded-xl border border-edge bg-surface/60 p-4">
+          <div className="mt-4 rounded-xl glass-surface p-4">
             <h3 className="font-semibold">{text.artDirectionAxes}</h3>
             <ul className="mt-2 space-y-1 text-sm text-muted">
               {ideaBoard.artDirection.map((line) => (
@@ -1051,11 +1058,11 @@ export default function StyleEnginePage() {
                 {componentRecommendations.map((entry) => (
                   <article
                     key={`${entry.item.id}-${entry.recommendedForPage}`}
-                    className="rounded-xl border border-edge bg-surface/60 p-4"
+                    className="rounded-xl glass-surface p-4"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h3 className="font-semibold">{entry.item.componentName}</h3>
-                      <span className="text-xs text-muted">
+                      <span className="text-sm text-muted">
                         {text.sourceLabel}: {entry.item.source}
                       </span>
                     </div>
@@ -1073,7 +1080,7 @@ export default function StyleEnginePage() {
                       {text.pageTypeLabels[entry.recommendedForPage]} /{" "}
                       {entry.recommendedForSection}
                     </p>
-                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted">
+                    <div className="mt-3 flex flex-wrap gap-3 text-sm text-muted">
                       <span>
                         {text.licenseLabel}: {entry.item.license}
                       </span>
@@ -1094,11 +1101,11 @@ export default function StyleEnginePage() {
                 {frameworkRecommendations.map((framework) => (
                   <article
                     key={framework.id}
-                    className="rounded-xl border border-edge bg-surface/60 p-4"
+                    className="rounded-xl glass-surface p-4"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h3 className="font-semibold">{framework.name}</h3>
-                      <span className="text-xs text-muted">{framework.type}</span>
+                      <span className="text-sm text-muted">{framework.type}</span>
                     </div>
                     <p className="mt-3 text-sm text-muted">
                       <span className="font-semibold text-text">{text.reasonLabel}:</span>{" "}
@@ -1136,7 +1143,7 @@ export default function StyleEnginePage() {
               return (
                 <article
                   key={pagePlan.page}
-                  className="rounded-xl border border-edge bg-surface/60 p-4"
+                  className="rounded-xl glass-surface p-4"
                 >
                   <h3 className="font-semibold">{text.pageTypeLabels[pagePlan.page]}</h3>
                   <p className="mt-1 text-sm text-muted">
@@ -1152,7 +1159,7 @@ export default function StyleEnginePage() {
                           className="rounded-lg border border-edge bg-panel px-3 py-3"
                         >
                           <p className="text-sm font-semibold">{entry.item.componentName}</p>
-                          <p className="mt-1 text-xs text-muted">
+                          <p className="mt-1 text-sm text-muted">
                             {entry.item.libraryName} · {entry.recommendedForSection}
                           </p>
                         </div>
@@ -1165,10 +1172,10 @@ export default function StyleEnginePage() {
           </div>
         </SectionCard>
 
-        <section className="mt-6 rounded-3xl border border-edge bg-panel/70 p-6 shadow-panel">
+        <section className="mt-6 glass-panel rounded-3xl p-6 shadow-panel">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold">{text.favoritesTitle}</h2>
-            <p className="text-xs text-muted">{text.favoritesHint}</p>
+            <p className="text-sm text-muted">{text.favoritesHint}</p>
           </div>
 
           {favorites.length === 0 ? (
@@ -1178,9 +1185,9 @@ export default function StyleEnginePage() {
               {favorites.map((favorite) => (
                 <article
                   key={favorite.id}
-                  className="rounded-xl border border-edge bg-surface/60 p-4"
+                  className="rounded-xl glass-surface p-4"
                 >
-                  <p className="text-xs text-muted">
+                  <p className="text-sm text-muted">
                     {new Date(favorite.createdAt).toLocaleString(localeTag(locale))}
                   </p>
                   <p className="mt-2 text-sm">
@@ -1192,13 +1199,13 @@ export default function StyleEnginePage() {
                   <div className="mt-3 flex gap-2">
                     <button
                       onClick={() => loadFavorite(favorite)}
-                      className="rounded-lg border border-edge bg-panel px-3 py-1.5 text-xs font-semibold transition hover:border-accent"
+                      className="rounded-lg border border-edge bg-panel px-3 py-1.5 text-sm font-semibold transition hover:border-accent"
                     >
                       {text.load}
                     </button>
                     <button
                       onClick={() => removeFavorite(favorite.id)}
-                      className="rounded-lg border border-edge bg-panel px-3 py-1.5 text-xs font-semibold transition hover:border-accent"
+                      className="rounded-lg border border-edge bg-panel px-3 py-1.5 text-sm font-semibold transition hover:border-accent"
                     >
                       {text.remove}
                     </button>
@@ -1209,12 +1216,12 @@ export default function StyleEnginePage() {
           )}
         </section>
 
-        <section className="mt-6 rounded-3xl border border-edge bg-panel/70 p-6 shadow-panel">
+        <section className="mt-6 glass-panel rounded-3xl p-6 shadow-panel">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold">{text.historyTitle}</h2>
             <button
               onClick={clearHistory}
-              className="rounded-lg border border-edge bg-panel px-3 py-1.5 text-xs font-semibold transition hover:border-accent"
+              className="rounded-lg border border-edge bg-panel px-3 py-1.5 text-sm font-semibold transition hover:border-accent"
             >
               {text.clear}
             </button>
@@ -1225,8 +1232,8 @@ export default function StyleEnginePage() {
           ) : (
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {history.map((entry) => (
-                <article key={entry.id} className="rounded-xl border border-edge bg-surface/60 p-4">
-                  <p className="text-xs text-muted">
+                <article key={entry.id} className="rounded-xl glass-surface p-4">
+                  <p className="text-sm text-muted">
                     {new Date(entry.createdAt).toLocaleString(localeTag(locale))}
                   </p>
                   <p className="mt-2 text-sm">
@@ -1238,7 +1245,7 @@ export default function StyleEnginePage() {
                   <div className="mt-3">
                     <button
                       onClick={() => loadFromHistory(entry)}
-                      className="rounded-lg border border-edge bg-panel px-3 py-1.5 text-xs font-semibold transition hover:border-accent"
+                      className="rounded-lg border border-edge bg-panel px-3 py-1.5 text-sm font-semibold transition hover:border-accent"
                     >
                       {text.load}
                     </button>
