@@ -4,8 +4,9 @@ import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 
 export const metadata: Metadata = {
-  title: "Style Engine PWA",
-  description: "Web tasarim fikirlerini hizli ve cesitli sekilde uret.",
+  title: "Style Engine - Build before you build",
+  description:
+    "Briefi stratejiye, mimariye ve implementation-ready export paketlerine donusturen pre-build decision layer.",
   manifest: "/manifest.webmanifest",
   icons: {
     apple: "/icon-192.svg",

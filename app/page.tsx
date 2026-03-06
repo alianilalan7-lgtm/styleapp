@@ -1,967 +1,546 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
-import { InstallPwaButton } from "@/components/install-pwa-button";
+import type { Locale } from "@/lib/i18n";
 import {
-  BlueprintOutput,
-  ProjectBrief,
-  buildBlueprintOutput,
-  buildSuggestedPages,
-} from "@/lib/blueprint";
-import {
-  ComponentDepthPreference,
-  FrameworkPreference,
-  PAGE_TYPE_OPTIONS,
-  PageType,
-  SITE_TYPE_OPTIONS,
-  SiteType,
-} from "@/lib/catalog";
-import {
-  DEFAULT_LOCALE,
-  LOCALES,
-  LOCALE_QUERY_KEY,
-  LOCALE_STORAGE_KEY,
-  Locale,
-  UI_TEXT,
-  interpolate,
-  localeTag,
-} from "@/lib/i18n";
-import {
-  BrandDirection,
-  OPTIONS,
-  PILLARS,
-  PROMPT_PRESETS,
-  Pillar,
-  PromptPreset,
-  StylePack,
-  generatePack,
-  getPackValue,
-  setPackValue,
-} from "@/lib/style-engine";
+  BRAND_PERSONALITY_OPTIONS,
+  BUILD_DESTINATION_OPTIONS,
+  BUSINESS_TYPE_OPTIONS,
+  COMPLEXITY_OPTIONS,
+  CONTENT_DENSITY_OPTIONS,
+  CONVERSION_GOAL_OPTIONS,
+  PRIMARY_GOAL_OPTIONS,
+  PROJECT_TYPE_OPTIONS,
+  TECHNICAL_PREFERENCE_OPTIONS,
+  VERTICAL_PACK_OPTIONS,
+} from "@/lib/strategy/intake";
+import type {
+  BriefIntake,
+  BuildDestination,
+  ComposeOutput,
+  DestinationPack,
+} from "@/lib/strategy/types";
 
-type SavedPack = {
-  id: string;
-  createdAt: string;
-  pack: StylePack;
-};
+const STEP_IDS = [1, 2, 3, 4, 5, 6] as const;
 
-type HistoryItem = {
-  id: string;
-  createdAt: string;
-  pack: StylePack;
-};
+type StepId = (typeof STEP_IDS)[number];
 
-const FAVORITES_KEY = "style-engine-favorites-v1";
-const HISTORY_KEY = "style-engine-history-v1";
-const MAX_FAVORITES = 12;
-const MAX_HISTORY = 20;
-const INITIAL_PACK: StylePack = {
-  layout: OPTIONS.Layout[0],
-  visual: OPTIONS.Visual[0],
-  typography: OPTIONS.Typography[0],
-  mood: OPTIONS.Mood[0],
-  motion: OPTIONS.Motion[0],
-};
-
-function getStorageSafe(): Storage | null {
-  if (typeof globalThis === "undefined") return null;
-  const storage = (globalThis as { localStorage?: Storage }).localStorage;
-  if (!storage) return null;
-  if (typeof storage.getItem !== "function") return null;
-  if (typeof storage.setItem !== "function") return null;
-  return storage;
-}
-
-function readList<T>(key: string): T[] {
-  const storage = getStorageSafe();
-  if (!storage) return [];
-  try {
-    const raw = storage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as T[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function readListWithGuard<T>(key: string, guard: (value: unknown) => value is T): T[] {
-  const list = readList<unknown>(key);
-  return list.filter(guard);
-}
-
-function writeList<T>(key: string, value: T[]) {
-  const storage = getStorageSafe();
-  if (!storage) return;
-  storage.setItem(key, JSON.stringify(value));
-}
-
-function isStylePack(value: unknown): value is StylePack {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.layout === "string" &&
-    typeof candidate.visual === "string" &&
-    typeof candidate.typography === "string" &&
-    typeof candidate.mood === "string" &&
-    typeof candidate.motion === "string"
-  );
-}
-
-function isSavedPack(value: unknown): value is SavedPack {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.id === "string" &&
-    typeof candidate.createdAt === "string" &&
-    isStylePack(candidate.pack)
-  );
-}
-
-function isHistoryItem(value: unknown): value is HistoryItem {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.id === "string" &&
-    typeof candidate.createdAt === "string" &&
-    isStylePack(candidate.pack)
-  );
-}
-
-function encodePack(pack: StylePack) {
-  const json = JSON.stringify(pack);
-  const binary = encodeURIComponent(json).replace(
-    /%([0-9A-F]{2})/g,
-    (_, hex: string) => String.fromCharCode(parseInt(hex, 16)),
-  );
-  return window
-    .btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
-
-function decodePack(token: string): StylePack | null {
-  try {
-    const base64 = token.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = `${base64}${"=".repeat((4 - (base64.length % 4)) % 4)}`;
-    const binary = window.atob(padded);
-    const percentEncoded = Array.from(binary)
-      .map((char) => `%${char.charCodeAt(0).toString(16).padStart(2, "0")}`)
-      .join("");
-    const parsed = JSON.parse(decodeURIComponent(percentEncoded)) as unknown;
-    return isStylePack(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function packSignature(pack: StylePack) {
-  return JSON.stringify(pack);
-}
-
-function pageSignature(pages: PageType[]) {
-  return pages.join("|");
-}
-
-function buildBrief(input: {
-  siteType: SiteType;
-  brandBrief: string;
-  audience: string;
-  pageCount: number;
-  requiredPages: PageType[];
-  frameworkPreference: FrameworkPreference;
-  componentDepthPreference: ComponentDepthPreference;
-}): ProjectBrief {
-  return {
-    siteType: input.siteType,
-    brandBrief: input.brandBrief,
-    audience: input.audience,
-    pageCount: input.pageCount,
-    requiredPages: input.requiredPages,
-    frameworkPreference: input.frameworkPreference,
-    componentDepthPreference: input.componentDepthPreference,
-  };
-}
-
-function Pill({
-  label,
-  value,
-  pillar,
-  options,
-  isLocked,
-  onToggle,
-  onSelect,
-  lockText,
-  lockedText,
-  manualSelectText,
-}: {
-  label: string;
-  value: string;
-  pillar: Pillar;
-  options: string[];
-  isLocked: boolean;
-  onToggle: (pillar: Pillar) => void;
-  onSelect: (pillar: Pillar, value: string) => void;
-  lockText: string;
-  lockedText: string;
-  manualSelectText: string;
-}) {
-  return (
-    <div className="glass-panel rounded-2xl p-4 shadow-panel">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm uppercase tracking-[0.18em] text-muted">{label}</p>
-        <button
-          onClick={() => onToggle(pillar)}
-          className={`rounded-full px-3 py-1 text-sm font-semibold transition ${
-            isLocked
-              ? "bg-accent text-surface"
-              : "bg-surface text-text hover:border hover:border-edge"
-          }`}
-        >
-          {isLocked ? lockedText : lockText}
-        </button>
-      </div>
-      <p className="mt-2 text-lg font-semibold leading-snug">{value}</p>
-      <label className="mt-4 block text-sm uppercase tracking-[0.14em] text-muted">
-        {manualSelectText}
-      </label>
-      <select
-        value={value}
-        onChange={(event) => onSelect(pillar, event.target.value)}
-        className="mt-2 w-full rounded-lg border border-edge bg-surface px-3 py-2 text-sm text-text outline-none transition focus:border-accent"
-      >
-        {options.map((option) => (
-          <option key={option} value={option} className="bg-surface text-text">
-            {option}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function SectionCard({
-  title,
-  hint,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="glass-panel rounded-3xl p-6 shadow-panel">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xl font-bold">{title}</h2>
-        {hint ? <p className="text-sm text-muted">{hint}</p> : null}
-      </div>
-      <div className="mt-4">{children}</div>
-    </section>
-  );
-}
-
-export default function StyleEnginePage() {
-  const [locked, setLocked] = useState<Partial<Record<Pillar, boolean>>>({
-    Layout: false,
-    Visual: false,
-    Typography: false,
-    Mood: false,
-    Motion: false,
-  });
-  const [pack, setPack] = useState<StylePack>(INITIAL_PACK);
-  const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
-  const [promptPreset, setPromptPreset] = useState<PromptPreset>("GPT");
-  const [brandBrief, setBrandBrief] = useState("");
-  const [audience, setAudience] = useState("");
-  const [siteType, setSiteType] = useState<SiteType>("marketing");
-  const [pageCount, setPageCount] = useState(5);
-  const [requiredPages, setRequiredPages] = useState<PageType[]>(() =>
-    buildSuggestedPages("marketing", 5),
-  );
-  const [frameworkPreference, setFrameworkPreference] =
-    useState<FrameworkPreference>("auto");
-  const [componentDepthPreference, setComponentDepthPreference] =
-    useState<ComponentDepthPreference>("balanced");
-  const [brandDirections, setBrandDirections] = useState<BrandDirection[]>([]);
-  const [generatedBlueprint, setGeneratedBlueprint] =
-    useState<BlueprintOutput | null>(null);
-  const [favorites, setFavorites] = useState<SavedPack[]>([]);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [message, setMessage] = useState("");
-  const [generationError, setGenerationError] = useState("");
-  const [isGeneratingBlueprint, setIsGeneratingBlueprint] = useState(false);
-  const [urlReady, setUrlReady] = useState(false);
-  const hasLoadedPackFromUrl = useRef(false);
-  const text = UI_TEXT[locale];
-
-  const brief = useMemo(
-    () =>
-      buildBrief({
-        siteType,
-        brandBrief,
-        audience,
-        pageCount,
-        requiredPages,
-        frameworkPreference,
-        componentDepthPreference,
-      }),
-    [
-      audience,
-      brandBrief,
-      componentDepthPreference,
-      frameworkPreference,
-      pageCount,
-      requiredPages,
-      siteType,
+const COPY = {
+  tr: {
+    title: "Style Engine",
+    subtitle: "Build before you build.",
+    description:
+      "Briefi stratejiye, sayfa mimarisine, component zekasina ve hedef araca hazir export paketlerine donustur.",
+    stepTitles: [
+      "Projeyi Anla",
+      "Stratejiyi Cikar",
+      "Sayfa Mimarisi",
+      "Taste Engine",
+      "Component Intelligence",
+      "Export Orchestration",
     ],
-  );
+    generate: "Karar Paketini Uret",
+    generating: "Uretiliyor...",
+    next: "Sonraki",
+    prev: "Onceki",
+    why: "Bu onerinin nedeni",
+    export: "Destination Pack Uret",
+    copyMarkdown: "Markdown Kopyala",
+    downloadMarkdown: "Markdown Indir",
+    downloadJson: "JSON Indir",
+    openLegacy: "Legacy akisi ac",
+    adminCatalog: "Catalog Admin",
+    error: "Islem basarisiz oldu.",
+  },
+  en: {
+    title: "Style Engine",
+    subtitle: "Build before you build.",
+    description:
+      "Turn a rough brief into strategy, page architecture, component intelligence, and destination-ready export packs.",
+    stepTitles: [
+      "Understand Project",
+      "Extract Strategy",
+      "Page Architecture",
+      "Taste Engine",
+      "Component Intelligence",
+      "Export Orchestration",
+    ],
+    generate: "Generate Decision Package",
+    generating: "Generating...",
+    next: "Next",
+    prev: "Previous",
+    why: "Why this recommendation",
+    export: "Build Destination Pack",
+    copyMarkdown: "Copy Markdown",
+    downloadMarkdown: "Download Markdown",
+    downloadJson: "Download JSON",
+    openLegacy: "Open legacy flow",
+    adminCatalog: "Catalog Admin",
+    error: "Request failed.",
+  },
+} as const;
 
-  const localBlueprint = useMemo(
-    () => buildBlueprintOutput(brief, pack, promptPreset, locale),
-    [brief, locale, pack, promptPreset],
-  );
+function pretty(value: string) {
+  return value
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
-  const displayedBlueprint = generatedBlueprint ?? localBlueprint;
-  const prompt = displayedBlueprint.prompt;
-  const concept = displayedBlueprint.concept;
-  const ideaBoard = displayedBlueprint.ideaBoard;
-  const pagePlans = displayedBlueprint.pagePlans;
-  const componentRecommendations = displayedBlueprint.componentRecommendations;
-  const frameworkRecommendations = displayedBlueprint.frameworkRecommendations;
+function toMarkdownFilename(destination: BuildDestination) {
+  return `style-engine-${destination}-pack.md`;
+}
 
-  const pageMatches = useMemo(
-    () =>
-      Object.fromEntries(
-        pagePlans.map((pagePlan) => [
-          pagePlan.page,
-          componentRecommendations.filter(
-            (recommendation) => recommendation.recommendedForPage === pagePlan.page,
-          ),
-        ]),
-      ) as Record<PageType, typeof componentRecommendations>,
-    [componentRecommendations, pagePlans],
-  );
+function toJsonFilename(destination: BuildDestination) {
+  return `style-engine-${destination}-pack.json`;
+}
 
-  const trackHistory = useCallback((nextPack: StylePack) => {
-    setHistory((prev) => {
-      const nextSignature = packSignature(nextPack);
-      const deduped = prev.filter((entry) => packSignature(entry.pack) !== nextSignature);
-      const next: HistoryItem[] = [
-        {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          createdAt: new Date().toISOString(),
-          pack: nextPack,
-        },
-        ...deduped,
-      ].slice(0, MAX_HISTORY);
-      writeList(HISTORY_KEY, next);
-      return next;
-    });
-  }, []);
+function downloadText(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
-  const applyPack = useCallback(
-    (nextPack: StylePack, notice: string) => {
-      setPack(nextPack);
-      trackHistory(nextPack);
-      setMessage(notice);
-    },
-    [trackHistory],
-  );
+const DEFAULT_INTAKE: BriefIntake = {
+  locale: "tr",
+  projectType: "marketing-site",
+  businessType: "ai-saas",
+  audience: "B2B karar vericiler",
+  primaryGoal: "lead-generation",
+  conversionGoal: "book-demo",
+  contentDensity: "balanced",
+  brandPersonality: ["trustworthy", "technical"],
+  technicalPreference: "nextjs",
+  targetBuildDestination: "codex",
+  complexityLevel: "balanced",
+  verticalPack: "ai-saas",
+  briefText:
+    "AI destekli urun. Hizli deger anlatimi, guven veren dil, net demo cagrisi ve implementasyona hazir kararlar gerekli.",
+};
 
-  useEffect(() => {
-    const storage = getStorageSafe();
-    const url = new URL(window.location.href);
-    const urlLocale = url.searchParams.get(LOCALE_QUERY_KEY);
+export default function DecisionWorkspacePage() {
+  const [locale, setLocale] = useState<Locale>("tr");
+  const [step, setStep] = useState<StepId>(1);
+  const [intake, setIntake] = useState<BriefIntake>(DEFAULT_INTAKE);
+  const [compose, setCompose] = useState<ComposeOutput | null>(null);
+  const [pack, setPack] = useState<DestinationPack | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-    if (urlLocale && LOCALES.includes(urlLocale as Locale)) {
-      setLocale(urlLocale as Locale);
-    } else if (storage) {
-      const storedLocale = storage.getItem(LOCALE_STORAGE_KEY);
-      if (storedLocale && LOCALES.includes(storedLocale as Locale)) {
-        setLocale(storedLocale as Locale);
+  const copy = COPY[locale];
+
+  const canGoPrev = step > 1;
+  const canGoNext = step < 6;
+
+  const activeStepTitle = copy.stepTitles[step - 1];
+
+  const onField = <K extends keyof BriefIntake>(key: K, value: BriefIntake[K]) => {
+    setIntake((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const togglePersonality = (signal: BriefIntake["brandPersonality"][number]) => {
+    setIntake((prev) => {
+      const exists = prev.brandPersonality.includes(signal);
+      if (exists) {
+        const next = prev.brandPersonality.filter((item) => item !== signal);
+        return { ...prev, brandPersonality: next.length > 0 ? next : [signal] };
       }
-    }
-  }, []);
-
-  useEffect(() => {
-    const storage = getStorageSafe();
-    if (storage) {
-      storage.setItem(LOCALE_STORAGE_KEY, locale);
-    }
-  }, [locale]);
-
-  useEffect(() => {
-    setFavorites(readListWithGuard(FAVORITES_KEY, isSavedPack));
-    setHistory(readListWithGuard(HISTORY_KEY, isHistoryItem));
-  }, []);
-
-  useEffect(() => {
-    if (hasLoadedPackFromUrl.current) return;
-    hasLoadedPackFromUrl.current = true;
-
-    const url = new URL(window.location.href);
-    const token = url.searchParams.get("pack");
-    if (token) {
-      const decoded = decodePack(token);
-      if (decoded) {
-        setPack(decoded);
-        trackHistory(decoded);
-        setMessage(text.packLoadedFromUrl);
-      }
-    }
-    setUrlReady(true);
-  }, [text.packLoadedFromUrl, trackHistory]);
-
-  useEffect(() => {
-    if (!urlReady) return;
-    const url = new URL(window.location.href);
-    url.searchParams.set("pack", encodePack(pack));
-    url.searchParams.set(LOCALE_QUERY_KEY, locale);
-    window.history.replaceState({}, "", `${url.pathname}?${url.searchParams.toString()}`);
-  }, [locale, pack, urlReady]);
-
-  useEffect(() => {
-    const suggested = buildSuggestedPages(siteType, pageCount);
-    setRequiredPages((prev) => {
-      const preserved = prev.filter((page) => suggested.includes(page));
-      const next = Array.from(new Set([...preserved, ...suggested])).slice(0, pageCount);
-      return pageSignature(prev) === pageSignature(next) ? prev : next;
+      return {
+        ...prev,
+        brandPersonality: [...prev.brandPersonality, signal].slice(0, 4),
+      };
     });
-  }, [pageCount, siteType]);
-
-  useEffect(() => {
-    setGeneratedBlueprint(null);
-    setGenerationError("");
-  }, [
-    audience,
-    brandBrief,
-    componentDepthPreference,
-    frameworkPreference,
-    locale,
-    pack,
-    pageCount,
-    promptPreset,
-    requiredPages,
-    siteType,
-  ]);
-
-  const toggleLock = (pillar: Pillar) => {
-    setLocked((prev) => ({ ...prev, [pillar]: !prev[pillar] }));
   };
 
-  const randomize = () => {
-    const next = generatePack(locked, pack);
-    applyPack(next, text.generatedPack);
-  };
-
-  const updatePillarManually = (pillar: Pillar, value: string) => {
-    setPack((prev) => setPackValue(prev, pillar, value));
-    setMessage(
-      interpolate(text.manualUpdatedTemplate, {
-        pillar: text.pillarLabels[pillar],
-      }),
-    );
-  };
-
-  const generateFromManualSelection = () => {
-    trackHistory(pack);
-    setMessage(text.builtFromSelection);
-  };
-
-  const createBrandDirections = () => {
-    setBrandDirections(displayedBlueprint.designDirections);
-    setMessage(text.generatedBrandDirections);
-  };
-
-  const generateBlueprint = async () => {
-    setIsGeneratingBlueprint(true);
-    setGenerationError("");
-    setMessage(text.generatingBlueprint);
+  const generateCompose = async () => {
+    setBusy(true);
+    setError("");
+    setPack(null);
 
     try {
-      const response = await fetch("/api/blueprint/generate", {
+      const response = await fetch("/api/strategy/compose", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          brief,
-          pack,
-          locale,
-          preset: promptPreset,
-        }),
+        body: JSON.stringify({ ...intake, locale }),
       });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const blueprint = (await response.json()) as BlueprintOutput;
-      setGeneratedBlueprint(blueprint);
-      setBrandDirections(blueprint.designDirections);
-      setMessage("");
+      const data = (await response.json()) as ComposeOutput;
+      setCompose(data);
+      setStep(2);
     } catch {
-      setGenerationError(text.generationError);
+      setError(copy.error);
     } finally {
-      setIsGeneratingBlueprint(false);
+      setBusy(false);
     }
   };
 
-  const copyPrompt = async () => {
+  const buildPack = async (destination: BuildDestination) => {
+    if (!compose) return;
+    setBusy(true);
+    setError("");
+
     try {
-      await navigator.clipboard.writeText(prompt);
-      setMessage(text.copiedPrompt);
-    } catch {
-      setMessage(text.clipboardBlocked);
-    }
-  };
-
-  const copyShareLink = async () => {
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set("pack", encodePack(pack));
-      url.searchParams.set(LOCALE_QUERY_KEY, locale);
-      await navigator.clipboard.writeText(url.toString());
-      setMessage(text.copiedShareLink);
-    } catch {
-      setMessage(text.copiedShareLinkError);
-    }
-  };
-
-  const unlockAll = () => {
-    setLocked({
-      Layout: false,
-      Visual: false,
-      Typography: false,
-      Mood: false,
-      Motion: false,
-    });
-    setMessage(text.unlockedAll);
-  };
-
-  const saveFavorite = () => {
-    setFavorites((prev) => {
-      const signature = packSignature(pack);
-      const deduped = prev.filter((favorite) => packSignature(favorite.pack) !== signature);
-      const next: SavedPack[] = [
-        {
-          id: `${Date.now()}`,
-          createdAt: new Date().toISOString(),
-          pack,
+      const response = await fetch("/api/exports/build", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-        ...deduped,
-      ].slice(0, MAX_FAVORITES);
-      writeList(FAVORITES_KEY, next);
-      return next;
-    });
-    setMessage(text.savedPack);
-  };
+        body: JSON.stringify({ destination, compose }),
+      });
 
-  const loadFavorite = (favorite: SavedPack) => {
-    applyPack(favorite.pack, text.loadedFavorite);
-  };
-
-  const loadFromHistory = (entry: HistoryItem) => {
-    applyPack(entry.pack, text.loadedHistory);
-  };
-
-  const clearHistory = () => {
-    setHistory([]);
-    writeList(HISTORY_KEY, []);
-    setMessage(text.clearedHistory);
-  };
-
-  const removeFavorite = (id: string) => {
-    setFavorites((prev) => {
-      const next = prev.filter((favorite) => favorite.id !== id);
-      writeList(FAVORITES_KEY, next);
-      return next;
-    });
-    setMessage(text.removedFavorite);
-  };
-
-  const toggleRequiredPage = (page: PageType) => {
-    setRequiredPages((prev) => {
-      const exists = prev.includes(page);
-      if (exists) {
-        if (prev.length === 1) return prev;
-        return prev.filter((item) => item !== page);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
-      if (prev.length >= pageCount) return prev;
-      return [...prev, page];
-    });
+
+      const data = (await response.json()) as DestinationPack;
+      setPack(data);
+      onField("targetBuildDestination", destination);
+    } catch {
+      setError(copy.error);
+    } finally {
+      setBusy(false);
+    }
   };
+
+  const rationaleBullets = useMemo(() => compose?.rationale.bullets ?? [], [compose]);
+  const progressPercent = Math.round((step / STEP_IDS.length) * 100);
+  const recommendationCount = compose?.componentIntelligence.recommendations.length ?? 0;
+  const pageCount = compose?.pageArchitecture.pages.length ?? 0;
 
   return (
-    <div className="min-h-screen">
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
-        <section className="glass-panel rounded-3xl p-6 shadow-panel backdrop-blur-sm sm:p-8">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{text.title}</h1>
-              <p className="mt-2 max-w-3xl text-sm text-muted sm:text-base">
-                {text.subtitle}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="text-sm uppercase tracking-[0.18em] text-muted">
-                {text.languageLabel}
-              </label>
-              <select
-                value={locale}
-                onChange={(event) => setLocale(event.target.value as Locale)}
-                className="rounded-lg border border-edge bg-surface px-3 py-2 text-sm text-text outline-none transition focus:border-accent"
+    <main className="studio-page mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+      <section className="studio-reveal glass-panel rounded-3xl p-6 shadow-panel sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Style Engine Studio</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{copy.title}</h1>
+            <p className="mt-2 text-lg font-semibold text-accent">{copy.subtitle}</p>
+            <p className="mt-2 max-w-3xl text-sm text-muted sm:text-base">{copy.description}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setLocale("tr")}
+              className={`choice-chip rounded-full border px-3 py-1 text-sm font-semibold ${
+                locale === "tr" ? "border-accent bg-accent text-surface" : "border-edge bg-surface"
+              }`}
+            >
+              TR
+            </button>
+            <button
+              onClick={() => setLocale("en")}
+              className={`choice-chip rounded-full border px-3 py-1 text-sm font-semibold ${
+                locale === "en" ? "border-accent bg-accent text-surface" : "border-edge bg-surface"
+              }`}
+            >
+              EN
+            </button>
+            <a href="/legacy" className="choice-chip rounded-lg border border-edge bg-surface px-3 py-1.5 text-sm font-semibold">
+              {copy.openLegacy}
+            </a>
+            <a href="/admin/catalog" className="choice-chip rounded-lg border border-edge bg-surface px-3 py-1.5 text-sm font-semibold">
+              {copy.adminCatalog}
+            </a>
+          </div>
+        </div>
+
+        <div className="mt-6 h-2 rounded-full bg-surface/80">
+          <div className="h-2 rounded-full bg-accent transition-all" style={{ width: `${progressPercent}%` }} />
+        </div>
+        <p className="mt-2 text-xs text-muted">Step {step} / {STEP_IDS.length} · %{progressPercent}</p>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {STEP_IDS.map((id) => {
+            const isActive = step === id;
+            const isUnlocked = id === 1 || Boolean(compose);
+            return (
+              <button
+                key={id}
+                onClick={() => {
+                  if (isUnlocked) setStep(id);
+                }}
+                className={`choice-chip flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm font-semibold ${
+                  isActive ? "border-accent bg-accent/20 text-text" : "border-edge bg-surface text-muted"
+                } ${!isUnlocked ? "opacity-55" : ""}`}
               >
-                {LOCALES.map((value) => (
-                  <option key={value} value={value}>
-                    {UI_TEXT[value].localeShortLabel}
-                  </option>
-                ))}
-              </select>
-              <InstallPwaButton label={text.installApp} />
-            </div>
+                <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${isActive ? "bg-accent text-surface" : "bg-panel text-muted"}`}>
+                  {id}
+                </span>
+                <span>{copy.stepTitles[id - 1]}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="studio-reveal studio-delay-1 mt-6 glass-panel rounded-3xl p-6 shadow-panel">
+        <header className="rounded-2xl border border-edge/60 bg-panel/55 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">
+            Step {step} of {STEP_IDS.length}
+          </p>
+          <h2 className="mt-1 text-2xl font-bold tracking-tight">{activeStepTitle}</h2>
+          <p className="mt-1 text-sm text-muted">
+            {compose
+              ? "Deterministic decision intelligence active. Recommendations are traceable and reproducible."
+              : "Fill intake and generate your decision package to unlock full architecture, taste, and component intelligence."}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full border border-edge bg-surface px-2.5 py-1 text-muted">
+              pages: {pageCount}
+            </span>
+            <span className="rounded-full border border-edge bg-surface px-2.5 py-1 text-muted">
+              patterns: {recommendationCount}
+            </span>
+            <span className="rounded-full border border-edge bg-surface px-2.5 py-1 text-muted">
+              destination: {intake.targetBuildDestination}
+            </span>
           </div>
+        </header>
 
-          <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <Pill
-              label={text.layoutLabel}
-              value={pack.layout}
-              pillar="Layout"
-              options={OPTIONS.Layout}
-              isLocked={Boolean(locked.Layout)}
-              onToggle={toggleLock}
-              onSelect={updatePillarManually}
-              lockText={text.lock}
-              lockedText={text.locked}
-              manualSelectText={text.manualSelect}
-            />
-            <Pill
-              label={text.visualLabel}
-              value={pack.visual}
-              pillar="Visual"
-              options={OPTIONS.Visual}
-              isLocked={Boolean(locked.Visual)}
-              onToggle={toggleLock}
-              onSelect={updatePillarManually}
-              lockText={text.lock}
-              lockedText={text.locked}
-              manualSelectText={text.manualSelect}
-            />
-            <Pill
-              label={text.typographyLabel}
-              value={pack.typography}
-              pillar="Typography"
-              options={OPTIONS.Typography}
-              isLocked={Boolean(locked.Typography)}
-              onToggle={toggleLock}
-              onSelect={updatePillarManually}
-              lockText={text.lock}
-              lockedText={text.locked}
-              manualSelectText={text.manualSelect}
-            />
-            <Pill
-              label={text.moodLabel}
-              value={pack.mood}
-              pillar="Mood"
-              options={OPTIONS.Mood}
-              isLocked={Boolean(locked.Mood)}
-              onToggle={toggleLock}
-              onSelect={updatePillarManually}
-              lockText={text.lock}
-              lockedText={text.locked}
-              manualSelectText={text.manualSelect}
-            />
-            <Pill
-              label={text.motionLabel}
-              value={pack.motion}
-              pillar="Motion"
-              options={OPTIONS.Motion}
-              isLocked={Boolean(locked.Motion)}
-              onToggle={toggleLock}
-              onSelect={updatePillarManually}
-              lockText={text.lock}
-              lockedText={text.locked}
-              manualSelectText={text.manualSelect}
-            />
-          </div>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              onClick={randomize}
-              className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-surface transition hover:brightness-105"
-            >
-              {text.randomize}
-            </button>
-            <button
-              onClick={generateFromManualSelection}
-              className="rounded-xl border border-edge bg-panel px-5 py-2.5 text-sm font-semibold transition hover:border-accent"
-            >
-              {text.buildFromSelection}
-            </button>
-            <button
-              onClick={copyPrompt}
-              className="rounded-xl border border-edge bg-panel px-5 py-2.5 text-sm font-semibold transition hover:border-accent"
-            >
-              {text.copyPrompt}
-            </button>
-            <button
-              onClick={copyShareLink}
-              className="rounded-xl border border-edge bg-panel px-5 py-2.5 text-sm font-semibold transition hover:border-accent"
-            >
-              {text.copyShareLink}
-            </button>
-            <button
-              onClick={saveFavorite}
-              className="rounded-xl border border-edge bg-panel px-5 py-2.5 text-sm font-semibold transition hover:border-accent"
-            >
-              {text.saveFavorite}
-            </button>
-            <button
-              onClick={unlockAll}
-              className="rounded-xl border border-edge bg-panel px-5 py-2.5 text-sm font-semibold transition hover:border-accent"
-            >
-              {text.unlockAll}
-            </button>
-          </div>
-
-          {message ? <p className="mt-3 text-sm text-muted">{message}</p> : null}
-        </section>
-
-        <section className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <SectionCard title={text.brandBriefTitle}>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div>
-                <label className="text-sm uppercase tracking-[0.18em] text-muted">
-                  {text.siteTypeLabel}
+        <div className="mt-5">
+          {step === 1 ? (
+            <div className="grid gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="text-sm">
+                  <span className="text-muted">Project type</span>
+                  <select
+                    value={intake.projectType}
+                    onChange={(event) => onField("projectType", event.target.value as BriefIntake["projectType"])}
+                    className="mt-1 w-full rounded-lg border border-edge bg-surface px-3 py-2"
+                  >
+                    {PROJECT_TYPE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{pretty(option)}</option>
+                    ))}
+                  </select>
                 </label>
-                <select
-                  value={siteType}
-                  onChange={(event) => setSiteType(event.target.value as SiteType)}
-                  className="mt-2 w-full rounded-xl glass-surface px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
-                >
-                  {SITE_TYPE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {text.siteTypeLabels[option]}
-                    </option>
-                  ))}
-                </select>
+
+                <label className="text-sm">
+                  <span className="text-muted">Business type</span>
+                  <select
+                    value={intake.businessType}
+                    onChange={(event) => onField("businessType", event.target.value as BriefIntake["businessType"])}
+                    className="mt-1 w-full rounded-lg border border-edge bg-surface px-3 py-2"
+                  >
+                    {BUSINESS_TYPE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{pretty(option)}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm">
+                  <span className="text-muted">Primary goal</span>
+                  <select
+                    value={intake.primaryGoal}
+                    onChange={(event) => onField("primaryGoal", event.target.value as BriefIntake["primaryGoal"])}
+                    className="mt-1 w-full rounded-lg border border-edge bg-surface px-3 py-2"
+                  >
+                    {PRIMARY_GOAL_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{pretty(option)}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm">
+                  <span className="text-muted">Conversion goal</span>
+                  <select
+                    value={intake.conversionGoal}
+                    onChange={(event) => onField("conversionGoal", event.target.value as BriefIntake["conversionGoal"])}
+                    className="mt-1 w-full rounded-lg border border-edge bg-surface px-3 py-2"
+                  >
+                    {CONVERSION_GOAL_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{pretty(option)}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm">
+                  <span className="text-muted">Content density</span>
+                  <select
+                    value={intake.contentDensity}
+                    onChange={(event) => onField("contentDensity", event.target.value as BriefIntake["contentDensity"])}
+                    className="mt-1 w-full rounded-lg border border-edge bg-surface px-3 py-2"
+                  >
+                    {CONTENT_DENSITY_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{pretty(option)}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm">
+                  <span className="text-muted">Complexity</span>
+                  <select
+                    value={intake.complexityLevel}
+                    onChange={(event) => onField("complexityLevel", event.target.value as BriefIntake["complexityLevel"])}
+                    className="mt-1 w-full rounded-lg border border-edge bg-surface px-3 py-2"
+                  >
+                    {COMPLEXITY_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{pretty(option)}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm">
+                  <span className="text-muted">Technical preference</span>
+                  <select
+                    value={intake.technicalPreference}
+                    onChange={(event) => onField("technicalPreference", event.target.value as BriefIntake["technicalPreference"])}
+                    className="mt-1 w-full rounded-lg border border-edge bg-surface px-3 py-2"
+                  >
+                    {TECHNICAL_PREFERENCE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{pretty(option)}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm">
+                  <span className="text-muted">Vertical pack</span>
+                  <select
+                    value={intake.verticalPack}
+                    onChange={(event) => onField("verticalPack", event.target.value as BriefIntake["verticalPack"])}
+                    className="mt-1 w-full rounded-lg border border-edge bg-surface px-3 py-2"
+                  >
+                    {VERTICAL_PACK_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{pretty(option)}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm md:col-span-2">
+                  <span className="text-muted">Target destination</span>
+                  <select
+                    value={intake.targetBuildDestination}
+                    onChange={(event) => onField("targetBuildDestination", event.target.value as BriefIntake["targetBuildDestination"])}
+                    className="mt-1 w-full rounded-lg border border-edge bg-surface px-3 py-2"
+                  >
+                    {BUILD_DESTINATION_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option.toUpperCase()}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm md:col-span-2">
+                  <span className="text-muted">Audience</span>
+                  <input
+                    value={intake.audience}
+                    onChange={(event) => onField("audience", event.target.value)}
+                    className="mt-1 w-full rounded-lg border border-edge bg-surface px-3 py-2"
+                  />
+                </label>
+
+                <label className="text-sm md:col-span-2">
+                  <span className="text-muted">Brief</span>
+                  <textarea
+                    value={intake.briefText}
+                    onChange={(event) => onField("briefText", event.target.value)}
+                    className="mt-1 min-h-28 w-full rounded-lg border border-edge bg-surface px-3 py-2"
+                  />
+                </label>
               </div>
 
               <div>
-                <label className="text-sm uppercase tracking-[0.18em] text-muted">
-                  {text.pageCountLabel}
-                </label>
-                <select
-                  value={pageCount}
-                  onChange={(event) => setPageCount(Number(event.target.value))}
-                  className="mt-2 w-full rounded-xl glass-surface px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
-                >
-                  {[3, 4, 5, 6, 7, 8].map((count) => (
-                    <option key={count} value={count}>
-                      {count}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="lg:col-span-2">
-                <label className="text-sm uppercase tracking-[0.18em] text-muted">
-                  {text.audienceLabel}
-                </label>
-                <input
-                  value={audience}
-                  onChange={(event) => setAudience(event.target.value)}
-                  placeholder={text.audiencePlaceholder}
-                  className="mt-2 w-full rounded-xl glass-surface px-4 py-3 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm uppercase tracking-[0.18em] text-muted">
-                  {text.frameworkPreferenceLabel}
-                </label>
-                <select
-                  value={frameworkPreference}
-                  onChange={(event) =>
-                    setFrameworkPreference(event.target.value as FrameworkPreference)
-                  }
-                  className="mt-2 w-full rounded-xl glass-surface px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
-                >
-                  {(
-                    Object.keys(text.frameworkPreferenceLabels) as FrameworkPreference[]
-                  ).map((option) => (
-                    <option key={option} value={option}>
-                      {text.frameworkPreferenceLabels[option]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm uppercase tracking-[0.18em] text-muted">
-                  {text.componentDepthLabel}
-                </label>
-                <select
-                  value={componentDepthPreference}
-                  onChange={(event) =>
-                    setComponentDepthPreference(
-                      event.target.value as ComponentDepthPreference,
-                    )
-                  }
-                  className="mt-2 w-full rounded-xl glass-surface px-3 py-3 text-sm text-text outline-none transition focus:border-accent"
-                >
-                  {(
-                    Object.keys(text.componentDepthLabels) as ComponentDepthPreference[]
-                  ).map((option) => (
-                    <option key={option} value={option}>
-                      {text.componentDepthLabels[option]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="lg:col-span-2">
-                <label className="text-sm uppercase tracking-[0.18em] text-muted">
-                  {text.requiredPagesLabel}
-                </label>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {PAGE_TYPE_OPTIONS.map((page) => {
-                    const isSelected = requiredPages.includes(page);
-                    const isDisabled = !isSelected && requiredPages.length >= pageCount;
+                <p className="text-sm text-muted">Brand personality</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {BRAND_PERSONALITY_OPTIONS.map((signal) => {
+                    const active = intake.brandPersonality.includes(signal);
                     return (
                       <button
-                        key={page}
+                        key={signal}
                         type="button"
-                        onClick={() => toggleRequiredPage(page)}
-                        disabled={isDisabled}
-                        className={`choice-chip rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
-                          isSelected
+                        onClick={() => togglePersonality(signal)}
+                        className={`rounded-full border px-3 py-1 text-sm font-semibold ${
+                          active
                             ? "border-accent bg-accent text-surface"
-                            : "border-edge bg-surface text-text hover:border-accent disabled:cursor-not-allowed disabled:opacity-40"
+                            : "border-edge bg-surface text-text"
                         }`}
                       >
-                        {text.pageTypeLabels[page]}
+                        {pretty(signal)}
                       </button>
                     );
                   })}
                 </div>
               </div>
-            </div>
 
-            <p className="mt-5 text-sm text-muted">{text.brandBriefDescription}</p>
-            <textarea
-              value={brandBrief}
-              onChange={(event) => setBrandBrief(event.target.value)}
-              placeholder={text.brandBriefPlaceholder}
-              className="mt-3 min-h-36 w-full rounded-xl glass-surface p-4 text-sm text-text outline-none transition placeholder:text-muted focus:border-accent"
-            />
-
-            <div className="mt-4 flex flex-wrap gap-3">
               <button
-                onClick={createBrandDirections}
-                className="rounded-xl border border-edge bg-panel px-4 py-2 text-sm font-semibold transition hover:border-accent"
+                onClick={generateCompose}
+                disabled={busy}
+                className="choice-chip rounded-xl border border-accent bg-accent px-4 py-2 text-sm font-semibold text-surface disabled:opacity-70"
               >
-                {text.brandBriefAction}
-              </button>
-              <button
-                onClick={generateBlueprint}
-                disabled={isGeneratingBlueprint}
-                className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-surface transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {isGeneratingBlueprint ? text.generatingBlueprint : text.blueprintAction}
+                {busy ? copy.generating : copy.generate}
               </button>
             </div>
+          ) : null}
 
-            {generationError ? (
-              <p className="mt-3 text-sm text-red-300">{generationError}</p>
-            ) : null}
-
-            {brandDirections.length > 0 ? (
-              <div className="mt-5 grid gap-3 lg:grid-cols-2">
-                {brandDirections.map((direction) => (
-                  <article
-                    key={direction.id}
-                    className="rounded-xl glass-surface p-5 shadow-panel"
-                  >
-                    <h3 className="text-base font-semibold text-text">{direction.name}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-text">{direction.summary}</p>
-                    <p className="mt-3 text-sm text-muted">
-                      {text.layoutLabel}: {direction.pack.layout} | {text.visualLabel}:{" "}
-                      {direction.pack.visual}
-                    </p>
-                    <p className="mt-1 text-sm text-muted">
-                      {text.typographyLabel}: {direction.pack.typography} | {text.moodLabel}:{" "}
-                      {direction.pack.mood}
-                    </p>
-                    <p className="mt-1 text-sm text-muted">
-                      {text.motionLabel}: {direction.pack.motion}
-                    </p>
-                    <button
-                      onClick={() =>
-                        applyPack(
-                          direction.pack,
-                          interpolate(text.directionAppliedTemplate, {
-                            name: direction.name,
-                          }),
-                        )
-                      }
-                      className="mt-4 rounded-lg border border-edge bg-surface px-3 py-2 text-sm font-semibold text-text transition hover:border-accent"
-                    >
-                      {text.applyDirection}
-                    </button>
-                  </article>
-                ))}
+          {step === 2 && compose ? (
+            <div className="grid gap-4 text-sm">
+              <div className="rounded-xl glass-surface p-4">
+                <h2 className="font-semibold">Product interpretation</h2>
+                <p className="mt-2 text-muted">{compose.strategy.productInterpretation}</p>
               </div>
-            ) : null}
-          </SectionCard>
-
-          <SectionCard title={text.aiPromptTitle} hint={text.aiPromptHint}>
-            <div className="flex flex-wrap gap-2">
-              {PROMPT_PRESETS.map((preset) => (
-                <button
-                  key={preset}
-                  onClick={() => setPromptPreset(preset)}
-                  className={`rounded-full border px-3 py-1 text-sm font-semibold transition ${
-                    promptPreset === preset
-                      ? "border-accent bg-accent text-surface"
-                      : "border-edge bg-panel text-text hover:border-accent"
-                  }`}
-                >
-                  {preset}
-                </button>
-              ))}
+              <div className="rounded-xl glass-surface p-4">
+                <h2 className="font-semibold">Recommended scope</h2>
+                <p className="mt-2 text-muted">{compose.strategy.recommendedScope}</p>
+              </div>
+              <div className="rounded-xl glass-surface p-4">
+                <h2 className="font-semibold">Primary user journey</h2>
+                <ul className="mt-2 space-y-1 text-muted">
+                  {compose.strategy.primaryUserJourney.map((line) => <li key={line}>- {line}</li>)}
+                </ul>
+              </div>
+              <div className="rounded-xl glass-surface p-4">
+                <h2 className="font-semibold">Conversion logic</h2>
+                <ul className="mt-2 space-y-1 text-muted">
+                  {compose.strategy.conversionLogic.map((line) => <li key={line}>- {line}</li>)}
+                </ul>
+              </div>
+              <div className="rounded-xl glass-surface p-4">
+                <h2 className="font-semibold">Content strategy</h2>
+                <ul className="mt-2 space-y-1 text-muted">
+                  {compose.strategy.contentStrategy.map((line) => <li key={line}>- {line}</li>)}
+                </ul>
+              </div>
+              <div className="rounded-xl glass-surface p-4">
+                <h2 className="font-semibold">MVP now</h2>
+                <ul className="mt-2 space-y-1 text-muted">
+                  {compose.strategy.mvpNow.map((line) => <li key={line}>- {line}</li>)}
+                </ul>
+              </div>
+              <div className="rounded-xl glass-surface p-4">
+                <h2 className="font-semibold">Later phase</h2>
+                <ul className="mt-2 space-y-1 text-muted">
+                  {compose.strategy.laterPhase.map((line) => <li key={line}>- {line}</li>)}
+                </ul>
+              </div>
+              <div className="rounded-xl glass-surface p-4">
+                <h2 className="font-semibold">Risks and tradeoffs</h2>
+                <ul className="mt-2 space-y-1 text-muted">
+                  {[...compose.strategy.risks, ...compose.strategy.tradeoffs].map((line) => <li key={line}>- {line}</li>)}
+                </ul>
+              </div>
             </div>
-            <pre className="mt-4 whitespace-pre-wrap rounded-xl glass-surface p-4 text-sm leading-relaxed text-text">
-              {prompt}
-            </pre>
-          </SectionCard>
-        </section>
+          ) : null}
 
-        <section className="mt-6 grid gap-6 xl:grid-cols-2">
-          <SectionCard title={text.pageStructureTitle} hint={text.pageStructureHint}>
-            <div className="grid gap-4">
-              {pagePlans.map((pagePlan) => (
-                <article
-                  key={pagePlan.page}
-                  className="rounded-xl glass-surface p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-semibold">{text.pageTypeLabels[pagePlan.page]}</h3>
-                    <span className="text-sm text-muted">
-                      {pagePlan.recommendedCategories.join(" / ")}
-                    </span>
+          {step === 3 && compose ? (
+            <div className="grid gap-3">
+              {compose.pageArchitecture.pages.map((page) => (
+                <article key={page.page} className="rounded-xl glass-surface p-4 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="font-semibold">{page.page}</h2>
+                    <span className="text-muted">{page.priority}</span>
                   </div>
-                  <p className="mt-3 text-sm uppercase tracking-[0.14em] text-muted">
-                    {text.sectionsLabel}
-                  </p>
+                  <p className="mt-2 text-muted">{page.role}</p>
+                  <p className="mt-2 text-muted">content depth: {page.contentDepth}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {pagePlan.sections.map((section) => (
-                      <span
-                        key={section}
-                        className="rounded-full border border-edge bg-panel px-3 py-1 text-sm text-muted"
-                      >
+                    {page.suggestedSections.map((section) => (
+                      <span key={section} className="rounded-full border border-edge bg-panel px-2 py-0.5 text-xs text-muted">
                         {section}
                       </span>
                     ))}
@@ -969,293 +548,215 @@ export default function StyleEnginePage() {
                 </article>
               ))}
             </div>
-          </SectionCard>
+          ) : null}
 
-          <SectionCard title={text.conceptBlueprintTitle}>
+          {step === 4 && compose ? (
             <div className="grid gap-4 text-sm">
               <div className="rounded-xl glass-surface p-4">
-                <h3 className="font-semibold">{text.homepageSections}</h3>
-                <ul className="mt-2 space-y-1 text-muted">
-                  {concept.sections.map((section) => (
-                    <li key={section}>- {section}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="rounded-xl glass-surface p-4">
-                <h3 className="font-semibold">{text.signatureComponents}</h3>
-                <ul className="mt-2 space-y-1 text-muted">
-                  {concept.components.map((component) => (
-                    <li key={component}>- {component}</li>
-                  ))}
-                </ul>
+                <h2 className="font-semibold">{compose.taste.directionName}</h2>
+                <p className="mt-2 text-muted">{compose.taste.visualTone}</p>
               </div>
               <div className="rounded-xl glass-surface p-4 text-muted">
-                <p>
-                  <span className="font-semibold text-text">{text.colorDirection}:</span>{" "}
-                  {concept.colorDirection}
-                </p>
-                <p className="mt-2">
-                  <span className="font-semibold text-text">{text.typeScale}:</span>{" "}
-                  {concept.typeScale}
-                </p>
+                <p><span className="font-semibold text-text">Layout:</span> {compose.taste.layoutDirection}</p>
+                <p className="mt-1"><span className="font-semibold text-text">Typography:</span> {compose.taste.typographyDirection}</p>
+                <p className="mt-1"><span className="font-semibold text-text">Motion:</span> {compose.taste.motionLevel}</p>
+                <p className="mt-1"><span className="font-semibold text-text">Trust signal:</span> {compose.taste.trustSignal}</p>
               </div>
               <div className="rounded-xl glass-surface p-4">
-                <h3 className="font-semibold">{text.motionNotes}</h3>
-                <ul className="mt-2 space-y-1 text-muted">
-                  {concept.motionNotes.map((note) => (
-                    <li key={note}>- {note}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </SectionCard>
-        </section>
-
-        <SectionCard title={text.ideaBoardTitle} hint={text.ideaBoardHint}>
-          <div className="grid gap-4 lg:grid-cols-3">
-            {ideaBoard.moodboard.map((card) => (
-              <article key={card.title} className="rounded-xl glass-surface p-4">
-                <h3 className="font-semibold">{card.title}</h3>
-                <p className="mt-2 text-sm text-muted">{card.cue}</p>
-              </article>
-            ))}
-          </div>
-
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {ideaBoard.wireframe.map((row) => (
-              <article key={row.section} className="rounded-xl glass-surface p-4">
-                <p className="text-sm font-semibold">{row.section}</p>
-                <div className="mt-3 grid gap-2">
-                  {row.blocks.map((block) => (
-                    <div
-                      key={block}
-                      className="rounded-lg border border-edge/80 bg-panel px-3 py-2 text-sm text-muted"
-                    >
-                      {block}
-                    </div>
+                <h2 className="font-semibold">Signals</h2>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {compose.taste.aestheticSignals.map((signal) => (
+                    <span key={signal} className="rounded-full border border-edge bg-panel px-2 py-0.5 text-xs text-muted">{signal}</span>
                   ))}
                 </div>
+              </div>
+            </div>
+          ) : null}
+
+          {step === 5 && compose ? (
+            <div className="grid gap-3 text-sm">
+              <article className="rounded-xl glass-surface p-4">
+                <h2 className="font-semibold">Trust modules</h2>
+                <ul className="mt-2 space-y-1 text-muted">
+                  {compose.componentIntelligence.trustModules.map((line) => <li key={line}>- {line}</li>)}
+                </ul>
               </article>
-            ))}
-          </div>
-
-          <div className="mt-4 rounded-xl glass-surface p-4">
-            <h3 className="font-semibold">{text.artDirectionAxes}</h3>
-            <ul className="mt-2 space-y-1 text-sm text-muted">
-              {ideaBoard.artDirection.map((line) => (
-                <li key={line}>- {line}</li>
-              ))}
-            </ul>
-          </div>
-        </SectionCard>
-
-        <section className="mt-6 grid gap-6 xl:grid-cols-2">
-          <SectionCard title={text.freeComponentsTitle} hint={text.freeComponentsHint}>
-            {componentRecommendations.length === 0 ? (
-              <p className="text-sm text-muted">{text.noRecommendations}</p>
-            ) : (
-              <div className="grid gap-4">
-                {componentRecommendations.map((entry) => (
-                  <article
-                    key={`${entry.item.id}-${entry.recommendedForPage}`}
-                    className="rounded-xl glass-surface p-4"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 className="font-semibold">{entry.item.componentName}</h3>
-                      <span className="text-sm text-muted">
-                        {text.sourceLabel}: {entry.item.source}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-sm text-muted">
-                      {entry.item.libraryName} · {entry.item.category}
-                    </p>
-                    <p className="mt-3 text-sm text-muted">
-                      <span className="font-semibold text-text">{text.reasonLabel}:</span>{" "}
-                      {entry.reason}
-                    </p>
-                    <p className="mt-2 text-sm text-muted">
-                      <span className="font-semibold text-text">
-                        {text.recommendedForLabel}:
-                      </span>{" "}
-                      {text.pageTypeLabels[entry.recommendedForPage]} /{" "}
-                      {entry.recommendedForSection}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-3 text-sm text-muted">
-                      <span>
-                        {text.licenseLabel}: {entry.item.license}
-                      </span>
-                      <span>React: {entry.item.reactCompatible ? "Yes" : "No"}</span>
-                      <span>{entry.item.framework}</span>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </SectionCard>
-
-          <SectionCard title={text.frameworksTitle} hint={text.frameworksHint}>
-            {frameworkRecommendations.length === 0 ? (
-              <p className="text-sm text-muted">{text.noRecommendations}</p>
-            ) : (
-              <div className="grid gap-4">
-                {frameworkRecommendations.map((framework) => (
-                  <article
-                    key={framework.id}
-                    className="rounded-xl glass-surface p-4"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 className="font-semibold">{framework.name}</h3>
-                      <span className="text-sm text-muted">{framework.type}</span>
-                    </div>
-                    <p className="mt-3 text-sm text-muted">
-                      <span className="font-semibold text-text">{text.reasonLabel}:</span>{" "}
-                      {framework.reason}
-                    </p>
-                    <p className="mt-2 text-sm text-muted">
-                      <span className="font-semibold text-text">{text.pairingsLabel}:</span>{" "}
-                      {framework.pairings.join(", ")}
-                    </p>
-                    <p className="mt-2 text-sm text-muted">
-                      <span className="font-semibold text-text">
-                        {text.constraintsLabel}:
-                      </span>{" "}
-                      {framework.constraints.join(", ")}
-                    </p>
-                    <a
-                      href={framework.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 inline-flex text-sm font-semibold text-accent transition hover:opacity-80"
-                    >
-                      {framework.name}
-                    </a>
-                  </article>
-                ))}
-              </div>
-            )}
-          </SectionCard>
-        </section>
-
-        <SectionCard title={text.pageMatchTitle} hint={text.pageMatchHint}>
-          <div className="grid gap-4 lg:grid-cols-2">
-            {pagePlans.map((pagePlan) => {
-              const matches = pageMatches[pagePlan.page] ?? [];
-              return (
-                <article
-                  key={pagePlan.page}
-                  className="rounded-xl glass-surface p-4"
-                >
-                  <h3 className="font-semibold">{text.pageTypeLabels[pagePlan.page]}</h3>
-                  <p className="mt-1 text-sm text-muted">
-                    {pagePlan.sections.join(" / ")}
-                  </p>
-                  <div className="mt-3 grid gap-2">
-                    {matches.length === 0 ? (
-                      <p className="text-sm text-muted">{text.noRecommendations}</p>
-                    ) : (
-                      matches.map((entry) => (
-                        <div
-                          key={`${pagePlan.page}-${entry.item.id}`}
-                          className="rounded-lg border border-edge bg-panel px-3 py-3"
-                        >
-                          <p className="text-sm font-semibold">{entry.item.componentName}</p>
-                          <p className="mt-1 text-sm text-muted">
-                            {entry.item.libraryName} · {entry.recommendedForSection}
-                          </p>
-                        </div>
-                      ))
-                    )}
+              <article className="rounded-xl glass-surface p-4">
+                <h2 className="font-semibold">Conversion UX suggestions</h2>
+                <ul className="mt-2 space-y-1 text-muted">
+                  {compose.componentIntelligence.conversionUxSuggestions.map((line) => <li key={line}>- {line}</li>)}
+                </ul>
+              </article>
+              {compose.componentIntelligence.recommendations.map((item) => (
+                <article key={item.id} className="rounded-xl glass-surface p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="font-semibold">{item.componentName}</h2>
+                    <span className="text-muted">score {item.scoreBreakdown.total}</span>
                   </div>
-                </article>
-              );
-            })}
-          </div>
-        </SectionCard>
-
-        <section className="mt-6 glass-panel rounded-3xl p-6 shadow-panel">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold">{text.favoritesTitle}</h2>
-            <p className="text-sm text-muted">{text.favoritesHint}</p>
-          </div>
-
-          {favorites.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">{text.favoritesEmpty}</p>
-          ) : (
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {favorites.map((favorite) => (
-                <article
-                  key={favorite.id}
-                  className="rounded-xl glass-surface p-4"
-                >
-                  <p className="text-sm text-muted">
-                    {new Date(favorite.createdAt).toLocaleString(localeTag(locale))}
-                  </p>
-                  <p className="mt-2 text-sm">
-                    {PILLARS.map(
-                      (pillar) =>
-                        `${text.pillarLabels[pillar]}: ${getPackValue(favorite.pack, pillar)}`,
-                    ).join(" | ")}
-                  </p>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => loadFavorite(favorite)}
-                      className="rounded-lg border border-edge bg-panel px-3 py-1.5 text-sm font-semibold transition hover:border-accent"
-                    >
-                      {text.load}
-                    </button>
-                    <button
-                      onClick={() => removeFavorite(favorite.id)}
-                      className="rounded-lg border border-edge bg-panel px-3 py-1.5 text-sm font-semibold transition hover:border-accent"
-                    >
-                      {text.remove}
-                    </button>
-                  </div>
+                  <p className="mt-1 text-muted">{item.patternFamily} · {item.source}</p>
+                  <p className="mt-2 text-muted">complexity fit: {item.complexityFit}</p>
+                  <ul className="mt-2 space-y-1 text-muted">
+                    {item.rationale.map((line) => <li key={line}>- {line}</li>)}
+                  </ul>
                 </article>
               ))}
             </div>
-          )}
-        </section>
+          ) : null}
 
-        <section className="mt-6 glass-panel rounded-3xl p-6 shadow-panel">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold">{text.historyTitle}</h2>
-            <button
-              onClick={clearHistory}
-              className="rounded-lg border border-edge bg-panel px-3 py-1.5 text-sm font-semibold transition hover:border-accent"
-            >
-              {text.clear}
-            </button>
-          </div>
+          {step === 6 && compose ? (
+            <div className="grid gap-4 text-sm">
+              <div className="flex flex-wrap gap-2">
+                {BUILD_DESTINATION_OPTIONS.map((destination) => (
+                  <button
+                    key={destination}
+                    onClick={() => buildPack(destination)}
+                    className="choice-chip rounded-lg border border-edge bg-surface px-3 py-1.5 font-semibold"
+                  >
+                    {copy.export}: {destination.toUpperCase()}
+                  </button>
+                ))}
+              </div>
 
-          {history.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">{text.historyEmpty}</p>
-          ) : (
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {history.map((entry) => (
-                <article key={entry.id} className="rounded-xl glass-surface p-4">
-                  <p className="text-sm text-muted">
-                    {new Date(entry.createdAt).toLocaleString(localeTag(locale))}
-                  </p>
-                  <p className="mt-2 text-sm">
-                    {PILLARS.map(
-                      (pillar) =>
-                        `${text.pillarLabels[pillar]}: ${getPackValue(entry.pack, pillar)}`,
-                    ).join(" | ")}
-                  </p>
-                  <div className="mt-3">
+              {pack ? (
+                <>
+                  <pre className="max-h-80 overflow-auto rounded-xl glass-surface p-4 text-xs leading-relaxed">
+                    {pack.markdown}
+                  </pre>
+                  <div className="flex flex-wrap gap-2">
                     <button
-                      onClick={() => loadFromHistory(entry)}
-                      className="rounded-lg border border-edge bg-panel px-3 py-1.5 text-sm font-semibold transition hover:border-accent"
+                      onClick={() => navigator.clipboard.writeText(pack.markdown)}
+                      className="choice-chip rounded-lg border border-edge bg-surface px-3 py-1.5 font-semibold"
                     >
-                      {text.load}
+                      {copy.copyMarkdown}
+                    </button>
+                    <button
+                      onClick={() => downloadText(toMarkdownFilename(pack.destination), pack.markdown, "text/markdown")}
+                      className="choice-chip rounded-lg border border-edge bg-surface px-3 py-1.5 font-semibold"
+                    >
+                      {copy.downloadMarkdown}
+                    </button>
+                    <button
+                      onClick={() =>
+                        downloadText(
+                          toJsonFilename(pack.destination),
+                          JSON.stringify(pack.json, null, 2),
+                          "application/json",
+                        )
+                      }
+                      className="choice-chip rounded-lg border border-edge bg-surface px-3 py-1.5 font-semibold"
+                    >
+                      {copy.downloadJson}
                     </button>
                   </div>
-                </article>
-              ))}
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
+        </div>
+
+        <div className="mt-6 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => canGoPrev && setStep((prev) => (prev - 1) as StepId)}
+            disabled={!canGoPrev}
+            className="choice-chip rounded-lg border border-edge bg-surface px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {copy.prev}
+          </button>
+          <button
+            onClick={() => canGoNext && setStep((prev) => (prev + 1) as StepId)}
+            disabled={!canGoNext || !compose}
+            className="choice-chip rounded-lg border border-edge bg-surface px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {copy.next}
+          </button>
+        </div>
+
+        {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
+      </section>
+
+      <section className="studio-reveal studio-delay-2 mt-6 grid gap-6 lg:grid-cols-2">
+        <section className="glass-panel rounded-3xl p-6 shadow-panel">
+          <h2 className="text-lg font-semibold">{copy.why}</h2>
+          <p className="mt-2 text-sm text-muted">
+            {compose
+              ? `Engine: ${compose.engineVersion} · ${new Date(compose.generatedAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")}`
+              : "Generate the decision package to view rationale and evidence."}
+          </p>
+
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-lg border border-edge bg-surface px-3 py-2">
+              <p className="text-muted">Required pages</p>
+              <p className="mt-1 text-sm font-semibold text-text">{pageCount}</p>
+            </div>
+            <div className="rounded-lg border border-edge bg-surface px-3 py-2">
+              <p className="text-muted">Pattern picks</p>
+              <p className="mt-1 text-sm font-semibold text-text">{recommendationCount}</p>
+            </div>
+          </div>
+
+          <ul className="mt-4 space-y-2 text-sm text-muted">
+            {rationaleBullets.length > 0
+              ? rationaleBullets.map((line) => <li key={line}>- {line}</li>)
+              : [
+                  "Scope and architecture are prioritized before implementation.",
+                  "Pattern fit is scored with deterministic weighted ranking.",
+                  "Destination packs are generated after decision confidence.",
+                ].map((line) => <li key={line}>- {line}</li>)}
+          </ul>
+
+          {compose ? (
+            <div className="mt-5 rounded-xl glass-surface p-4 text-sm text-muted">
+              <p>
+                <span className="font-semibold text-text">Vertical:</span> {compose.intake.verticalPack}
+              </p>
+              <p className="mt-1">
+                <span className="font-semibold text-text">Goal:</span> {compose.intake.primaryGoal}
+              </p>
+              <p className="mt-1">
+                <span className="font-semibold text-text">Destination:</span> {compose.intake.targetBuildDestination}
+              </p>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="glass-panel rounded-3xl p-6 shadow-panel">
+          <h2 className="text-lg font-semibold">Decision Snapshot</h2>
+          <p className="mt-2 text-sm text-muted">
+            Review this summary before continuing to build tools.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-lg border border-edge bg-surface px-3 py-2">
+              <p className="text-muted">Required pages</p>
+              <p className="mt-1 text-sm font-semibold text-text">{pageCount}</p>
+            </div>
+            <div className="rounded-lg border border-edge bg-surface px-3 py-2">
+              <p className="text-muted">Pattern picks</p>
+              <p className="mt-1 text-sm font-semibold text-text">{recommendationCount}</p>
+            </div>
+          </div>
+          {compose ? (
+            <div className="mt-4 rounded-xl border border-edge bg-surface p-4 text-sm text-muted">
+              <p>
+                <span className="font-semibold text-text">Vertical:</span> {compose.intake.verticalPack}
+              </p>
+              <p className="mt-1">
+                <span className="font-semibold text-text">Goal:</span> {compose.intake.primaryGoal}
+              </p>
+              <p className="mt-1">
+                <span className="font-semibold text-text">Destination:</span> {compose.intake.targetBuildDestination}
+              </p>
+              <p className="mt-3">
+                Outputs are deterministic and can be re-generated with the same brief.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-xl border border-edge bg-surface p-4 text-sm text-muted">
+              Decision package not generated yet.
             </div>
           )}
         </section>
-      </main>
-    </div>
+      </section>
+    </main>
   );
 }

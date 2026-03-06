@@ -66,6 +66,15 @@ export type BlueprintOutput = {
   frameworkRecommendations: FrameworkRecommendation[];
   ideaBoard: IdeaBoard;
   concept: Concept;
+  generationMeta?: BlueprintGenerationMeta;
+};
+
+export type BlueprintGenerationMeta = {
+  source: "ai" | "local";
+  model?: string;
+  requestId: string;
+  latencyMs: number;
+  warning?: string;
 };
 
 const PAGE_CATEGORY_MAP: Record<PageType, RegistryCategory[]> = {

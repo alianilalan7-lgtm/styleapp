@@ -1,7 +1,7 @@
 {
   "name": "Style Engine",
   "short_name": "StyleEngine",
-  "description": "Generate website design directions and prompts.",
+  "description": "Build before you build: decision intelligence for digital product strategy and architecture.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#08101d",
