@@ -3,12 +3,12 @@
 @tailwind utilities;
 
 :root {
-  --color-surface: #122238;
-  --color-panel: #182b45;
-  --color-edge: #5c79a6;
-  --color-text: #f4f8ff;
-  --color-muted: #c6d7f4;
-  --color-accent: #9ce0ff;
+  --color-surface: #ffffff;
+  --color-panel:   #e6faf7;
+  --color-edge:    #99d4cf;
+  --color-text:    #0f2828;
+  --color-muted:   #3d7070;
+  --color-accent:  #14b8a6;
 }
 
 * {
@@ -25,10 +25,10 @@ body {
   font-family: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
   color: var(--color-text);
   background:
-    radial-gradient(circle at 15% 10%, rgba(156, 224, 255, 0.2), transparent 42%),
-    radial-gradient(circle at 85% 5%, rgba(88, 154, 240, 0.24), transparent 38%),
-    radial-gradient(circle at 50% 100%, rgba(126, 178, 251, 0.08), transparent 45%),
-    #0f1c31;
+    radial-gradient(circle at 10% 5%,  rgba(20, 184, 166, 0.12), transparent 38%),
+    radial-gradient(circle at 90% 0%,  rgba(14, 165, 233, 0.10), transparent 36%),
+    radial-gradient(circle at 50% 100%, rgba(34, 211, 238, 0.06), transparent 42%),
+    #f0fdfb;
   background-attachment: fixed;
 }
 
@@ -42,11 +42,11 @@ h4 {
 @layer components {
   .studio-page {
     --color-surface: #ffffff;
-    --color-panel: #edf2fb;
-    --color-edge: #bfcee4;
-    --color-text: #17243d;
-    --color-muted: #5d6b86;
-    --color-accent: #1f6eea;
+    --color-panel:   #edf8f7;
+    --color-edge:    #99d4cf;
+    --color-text:    #0f2828;
+    --color-muted:   #3d7070;
+    --color-accent:  #0d9488;
     color: var(--color-text);
     position: relative;
     isolation: isolate;
@@ -59,10 +59,10 @@ h4 {
     z-index: -1;
     pointer-events: none;
     background:
-      radial-gradient(circle at 8% 4%, rgba(255, 234, 191, 0.6), transparent 36%),
-      radial-gradient(circle at 92% 0%, rgba(189, 214, 255, 0.65), transparent 38%),
-      radial-gradient(circle at 45% 94%, rgba(204, 228, 255, 0.55), transparent 42%),
-      linear-gradient(180deg, #f8fbff 0%, #eef3fb 55%, #e9effa 100%);
+      radial-gradient(circle at 8% 4%,  rgba(167, 243, 208, 0.45), transparent 36%),
+      radial-gradient(circle at 92% 0%, rgba(153, 246, 228, 0.50), transparent 38%),
+      radial-gradient(circle at 45% 94%, rgba(187, 247, 208, 0.40), transparent 42%),
+      linear-gradient(180deg, #f0fdfb 0%, #e6faf7 55%, #ddf5f0 100%);
   }
 
   .studio-page h1,
@@ -72,48 +72,48 @@ h4 {
   }
 
   .studio-page .glass-panel {
-    background: rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(184, 198, 224, 0.72);
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(153, 212, 207, 0.72);
     box-shadow:
-      0 20px 45px -30px rgba(84, 106, 146, 0.45),
+      0 20px 45px -30px rgba(13, 148, 136, 0.3),
       inset 0 1px 0 rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(9px);
   }
 
   .studio-page .glass-surface {
     background: rgba(255, 255, 255, 0.95);
-    border: 1px solid rgba(197, 208, 228, 0.82);
-    box-shadow: 0 10px 24px -24px rgba(69, 94, 141, 0.72);
+    border: 1px solid rgba(153, 212, 207, 0.7);
+    box-shadow: 0 10px 24px -24px rgba(13, 148, 136, 0.5);
     backdrop-filter: blur(0px);
   }
 
   .studio-page .glass-panel:hover,
   .studio-page .glass-panel:focus-within {
-    border-color: rgba(127, 165, 230, 0.86);
+    border-color: rgba(94, 196, 185, 0.86);
     box-shadow:
-      0 24px 54px -30px rgba(64, 89, 138, 0.5),
-      0 0 26px rgba(151, 187, 247, 0.24),
+      0 24px 54px -30px rgba(13, 148, 136, 0.4),
+      0 0 26px rgba(153, 246, 228, 0.22),
       inset 0 1px 0 rgba(255, 255, 255, 0.96);
   }
 
   .studio-page .glass-surface:hover,
   .studio-page .glass-surface:focus-within {
-    border-color: rgba(132, 170, 234, 0.92);
+    border-color: rgba(94, 196, 185, 0.9);
     box-shadow:
-      0 16px 32px -28px rgba(58, 87, 138, 0.44),
-      0 0 18px rgba(164, 195, 249, 0.2);
+      0 16px 32px -28px rgba(13, 148, 136, 0.38),
+      0 0 18px rgba(153, 246, 228, 0.18);
   }
 
   .studio-page .text-muted {
-    color: #5d6b86;
+    color: #3d7070;
   }
 
   .studio-page .choice-chip:hover,
   .studio-page .choice-chip:focus-visible {
-    border-color: rgba(128, 168, 235, 0.9);
+    border-color: rgba(94, 196, 185, 0.9);
     box-shadow:
-      0 12px 26px -20px rgba(54, 93, 160, 0.46),
-      0 0 18px rgba(164, 194, 245, 0.24);
+      0 12px 26px -20px rgba(13, 148, 136, 0.4),
+      0 0 18px rgba(153, 246, 228, 0.22);
     transform: translateY(-1px);
   }
 
@@ -132,39 +132,39 @@ h4 {
 
   .glass-panel {
     background:
-      linear-gradient(160deg, rgba(28, 46, 74, 0.78), rgba(13, 23, 39, 0.64));
-    border: 1px solid rgba(153, 186, 235, 0.28);
+      linear-gradient(160deg, rgba(14, 52, 52, 0.80), rgba(9, 30, 30, 0.66));
+    border: 1px solid rgba(45, 212, 191, 0.22);
     box-shadow:
-      0 24px 50px -32px rgba(4, 10, 20, 0.95),
-      inset 0 1px 0 rgba(232, 242, 255, 0.09);
+      0 24px 50px -32px rgba(2, 12, 12, 0.95),
+      inset 0 1px 0 rgba(153, 246, 228, 0.08);
     backdrop-filter: blur(16px);
     transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
   }
 
   .glass-surface {
     background:
-      linear-gradient(165deg, rgba(20, 34, 56, 0.74), rgba(12, 22, 38, 0.56));
-    border: 1px solid rgba(145, 177, 224, 0.26);
-    box-shadow: inset 0 1px 0 rgba(229, 241, 255, 0.08);
+      linear-gradient(165deg, rgba(12, 40, 40, 0.76), rgba(8, 26, 26, 0.58));
+    border: 1px solid rgba(45, 212, 191, 0.18);
+    box-shadow: inset 0 1px 0 rgba(153, 246, 228, 0.07);
     backdrop-filter: blur(14px);
     transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
   }
 
   .glass-panel:hover,
   .glass-panel:focus-within {
-    border-color: rgba(174, 210, 255, 0.55);
+    border-color: rgba(45, 212, 191, 0.48);
     box-shadow:
-      0 24px 56px -30px rgba(4, 10, 20, 0.95),
-      0 0 36px rgba(156, 224, 255, 0.18),
-      inset 0 1px 0 rgba(232, 242, 255, 0.16);
+      0 24px 56px -30px rgba(2, 12, 12, 0.95),
+      0 0 36px rgba(45, 212, 191, 0.16),
+      inset 0 1px 0 rgba(153, 246, 228, 0.14);
   }
 
   .glass-surface:hover,
   .glass-surface:focus-within {
-    border-color: rgba(174, 210, 255, 0.48);
+    border-color: rgba(45, 212, 191, 0.42);
     box-shadow:
-      0 0 30px rgba(156, 224, 255, 0.14),
-      inset 0 1px 0 rgba(232, 242, 255, 0.14);
+      0 0 30px rgba(45, 212, 191, 0.12),
+      inset 0 1px 0 rgba(153, 246, 228, 0.12);
     transform: translateY(-1px);
   }
 
@@ -174,34 +174,34 @@ h4 {
 
   .choice-chip:hover,
   .choice-chip:focus-visible {
-    border-color: rgba(174, 210, 255, 0.55);
-    box-shadow: 0 0 24px rgba(156, 224, 255, 0.2);
+    border-color: rgba(45, 212, 191, 0.52);
+    box-shadow: 0 0 24px rgba(45, 212, 191, 0.18);
     transform: translateY(-1px);
   }
 
   .choice-chip:active {
     transform: translateY(0);
-    box-shadow: 0 0 16px rgba(156, 224, 255, 0.18);
+    box-shadow: 0 0 16px rgba(45, 212, 191, 0.16);
   }
 
   .glass-panel input,
   .glass-panel select,
   .glass-panel textarea {
     color: var(--color-text);
-    border-color: rgba(158, 188, 235, 0.45);
+    border-color: rgba(45, 212, 191, 0.30);
   }
 
   .glass-panel input:focus,
   .glass-panel select:focus,
   .glass-panel textarea:focus {
     outline: none;
-    border-color: rgba(176, 218, 255, 0.78);
-    box-shadow: 0 0 0 2px rgba(156, 224, 255, 0.16);
+    border-color: rgba(45, 212, 191, 0.65);
+    box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.14);
   }
 
   .glass-panel .text-muted,
   .glass-surface .text-muted {
-    color: #ccdcf7;
+    color: #a8d8d8;
   }
 }
 

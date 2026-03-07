@@ -17,7 +17,7 @@ const config: Config = {
         accent: "var(--color-accent)",
       },
       boxShadow: {
-        panel: "0 12px 40px -20px rgba(5, 15, 40, 0.5)",
+        panel: "0 12px 40px -20px rgba(2, 30, 30, 0.55)",
       },
     },
   },

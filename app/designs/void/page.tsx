@@ -1,3 +1,5 @@
+"use client";
+
 export default function VoidLanding() {
   const features = [
     {
@@ -107,7 +109,7 @@ export default function VoidLanding() {
               How it works
             </a>
             <a
-              href="/"
+              href="/workspace"
               style={{
                 background: "#fff",
                 color: "#000",
@@ -189,7 +191,7 @@ export default function VoidLanding() {
 
         <div className="lp-fade-in lp-d3" style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
           <a
-            href="/"
+            href="/workspace"
             style={{
               background: "#2563EB",
               color: "#fff",
@@ -326,7 +328,7 @@ export default function VoidLanding() {
             Start with a brief. Leave with a complete decision package.
           </p>
           <a
-            href="/"
+            href="/workspace"
             style={{
               display: "inline-block",
               background: "#fff",
